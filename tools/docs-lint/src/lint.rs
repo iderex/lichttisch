@@ -119,15 +119,22 @@ pub enum Kind {
 ///
 /// Two block shapes exist in this tree. A fenced block runs between two lines
 /// whose first non-blank characters are three backticks. An indented block is
-/// a run of lines indented by four spaces that began after a blank line, and it
-/// ends at the first non-blank line that is not indented. The blank-line
+/// a run of lines indented past a threshold that began after a blank line, and
+/// it ends at the first non-blank line indented less than that. The blank-line
 /// condition is what keeps a wrapped list item from being read as code.
+///
+/// The threshold moves inside a list, and it has to. A paragraph continuing a
+/// list item is written four spaces in and is a paragraph, not code, so a rule
+/// reading it as a block would refuse ordinary Markdown for looking like a
+/// command. Inside a list the threshold is eight, which is where a code block
+/// under a list item actually starts.
 #[must_use]
 pub fn classify(text: &str) -> Vec<Kind> {
     let mut kinds = Vec::new();
     let mut fenced = false;
-    let mut indented = false;
+    let mut code_from: Option<usize> = None;
     let mut after_blank = true;
+    let mut in_list = false;
     for raw in text.lines() {
         if raw.trim_start().starts_with("```") {
             fenced = !fenced;
@@ -141,23 +148,51 @@ pub fn classify(text: &str) -> Vec<Kind> {
             continue;
         }
         if raw.trim().is_empty() {
-            kinds.push(if indented { Kind::Code } else { Kind::Prose });
+            kinds.push(if code_from.is_some() {
+                Kind::Code
+            } else {
+                Kind::Prose
+            });
             after_blank = true;
             continue;
         }
-        let deep = raw.starts_with("    ");
-        if indented && deep {
-            kinds.push(Kind::Code);
-        } else if !indented && deep && after_blank {
-            indented = true;
+        let indent = raw.len() - raw.trim_start().len();
+        if let Some(threshold) = code_from {
+            if indent >= threshold {
+                kinds.push(Kind::Code);
+                after_blank = false;
+                continue;
+            }
+            code_from = None;
+        }
+        let threshold = if in_list { 8 } else { 4 };
+        if indent >= threshold && after_blank {
+            code_from = Some(threshold);
             kinds.push(Kind::Code);
         } else {
-            indented = false;
+            if indent == 0 {
+                in_list = starts_a_list_item(raw);
+            }
             kinds.push(Kind::Prose);
         }
         after_blank = false;
     }
     kinds
+}
+
+/// Whether a line at column zero opens a list item. Only the column-zero case
+/// matters: it is what decides whether the lines under it are continuations.
+fn starts_a_list_item(line: &str) -> bool {
+    if line.starts_with("- ") || line.starts_with("* ") || line.starts_with("+ ") {
+        return true;
+    }
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    digits > 0
+        && line
+            .chars()
+            .nth(digits)
+            .is_some_and(|one| one == '.' || one == ')')
+        && line.chars().nth(digits + 1) == Some(' ')
 }
 
 /// The first line of every code block, with its zero-based line index.
@@ -748,6 +783,39 @@ mod tests {
         let list = "- text\n    git status\n";
         assert_eq!(block_openings(code).len(), 1);
         assert_eq!(block_openings(list).len(), 0);
+    }
+
+    #[test]
+    fn a_paragraph_continuing_a_list_item_is_not_a_block() {
+        // Four spaces under a list item is a continuation paragraph. The same
+        // four spaces after a paragraph is a code block, and the two are one
+        // line apart here.
+        let list = "- an item\n\n    a continuation paragraph under the item\n";
+        let prose = "a paragraph\n\n    a continuation paragraph under the item\n";
+        assert_eq!(block_openings(list).len(), 0);
+        assert_eq!(block_openings(prose).len(), 1);
+    }
+
+    #[test]
+    fn a_block_under_a_list_item_starts_at_eight_spaces() {
+        let text = "- an item\n\n        git status\n";
+        let openings = block_openings(text);
+        assert_eq!(openings.len(), 1);
+        assert_eq!(openings[0].1, "git status");
+    }
+
+    #[test]
+    fn a_list_ends_at_the_next_paragraph_and_the_threshold_goes_back() {
+        let text = "- an item\n\nback to prose\n\n    git status\n";
+        assert_eq!(block_openings(text).len(), 1);
+    }
+
+    #[test]
+    fn a_numbered_list_counts_as_a_list() {
+        assert_eq!(
+            block_openings("1. an item\n\n    a continuation\n").len(),
+            0
+        );
     }
 
     #[test]
