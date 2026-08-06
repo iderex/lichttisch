@@ -102,9 +102,20 @@ carries it.
 
 The bound, stated rather than left to be found: a line may permit a package
 that nothing reaches any more, and nothing refuses a permission that has gone
-stale. The rules this note states that are not about the dependency direction,
-the foreign-function surface among them, are issue #105 and are held by
-whoever reviews a change until it lands.
+stale.
+
+## What enforces the rest
+
+The rules this note states that are not about the dependency direction, the
+foreign-function surface among them, are `crates/lichttisch/tests/architecture_rules.rs`.
+Which of them that file refuses is printed rather than written down:
+
+    cargo test -p lichttisch --test architecture_rules -- --list rule::
+
+The rules it does not refuse are in `docs/architecture-rules.md`, each with the
+reason nothing can judge it today and what would. Between the command above and
+that document every structural rule in this tree is accounted for, and a rule
+appearing in neither is the failure both halves exist to make visible.
 
 `crates/lichttisch/tests/lock_file_is_current.rs` is the other guard in the
 workspace, and it is about the lock file rather than about these boundaries.
