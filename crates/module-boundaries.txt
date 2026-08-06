@@ -62,3 +62,7 @@ surface -> catalogue culling foreign session
 
 # The binary composes the modules and holds no logic of its own.
 lichttisch -> catalogue culling foreign ingest session surface
+
+# The benchmark harness. It measures the modules but is not one of them and
+# nothing ships it, so it reaches nothing here.
+bench ->
