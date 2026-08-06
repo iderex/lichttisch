@@ -3,7 +3,7 @@
 # self-contained first-party check, no external DCO App or third-party action (the
 # same internal-only posture as the PR-hygiene gate). It verifies every non-merge
 # commit in the PR carries a `Signed-off-by:` trailer matching its author, i.e. the
-# author asserted the DCO in ./DCO. Fail-closed: any unsigned commit reds the check.
+# author asserted the DCO in ./DCO.md. Fail-closed: any unsigned commit reds the check.
 name: DCO
 
 on:
@@ -74,7 +74,7 @@ jobs:
             fi
           done
           if [ "$fail" -ne 0 ]; then
-            echo "::error::One or more commits lack a DCO Signed-off-by matching the author. Sign your work with 'git commit -s' (or add it retroactively with 'git rebase --signoff <base>'). See CONTRIBUTING.md and ./DCO."
+            echo "::error::One or more commits lack a DCO Signed-off-by matching the author. Sign your work with 'git commit -s' (or add it retroactively with 'git rebase --signoff <base>'). See CONTRIBUTING.md and ./DCO.md."
             exit 1
           fi
           echo "All commits carry a matching DCO sign-off."
