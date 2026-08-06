@@ -102,7 +102,10 @@ here, because a firmer sentence in a document refuses nothing.
 `.github/dependabot.yml` is the sending end. Routine version updates are grouped
 into one pull request a week rather than a dozen. A security update is
 deliberately not grouped, so it arrives on its own and is distinguishable from a
-routine bump without opening it.
+routine bump without opening it. A release has to be seven days old before the
+updater offers it, so a pull request here is deliberately not the newest thing
+available: the window a compromised publish is most dangerous in is the hours
+before anybody has looked at it.
 
 The two are handled differently. A routine update waits for the ordinary review
 and can sit until somebody has time for it. A security update is read first,

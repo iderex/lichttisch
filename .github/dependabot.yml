@@ -22,6 +22,14 @@ updates:
       interval: "weekly"
     # A ceiling rather than a target: the group below normally produces one.
     open-pull-requests-limit: 5
+    # Wait before adopting a brand-new release. The window a compromised publish
+    # is most dangerous in is the first hours after it appears, before anyone has
+    # looked at it, and an updater that takes every release the moment it lands
+    # is the fastest possible route from a compromised upstream account into this
+    # tree. Seven days costs a week of latency on a routine bump and buys the
+    # time somebody else needs to notice.
+    cooldown:
+      default-days: 7
     labels:
       - "ci"
       - "security"
