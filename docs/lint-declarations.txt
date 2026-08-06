@@ -1,0 +1,47 @@
+# What the documentation lint allows, and why (#103).
+#
+# tools/docs-lint reads this file and nothing else decides what it permits.
+# Two kinds of line, and anything that is neither fails the parse rather than
+# being skipped, because a declaration a reader can mistype into silence is not
+# a declaration.
+#
+#     program <name> <why this tree has it>
+#     reference <token> <why it is not a path>
+#
+# Both directions are closed. An entry nothing uses is refused as loudly as a
+# missing one: a permission left standing after the thing it permitted was
+# removed reads to the next person as a live exemption, and they widen it
+# instead of deleting it.
+#
+# A comment line and a blank line are ignored. The reason is the rest of the
+# line and it is required.
+
+# Programs a document may invoke.
+#
+# The rule is over the first word of the first line of a code block. A program
+# not named here is one a reader cannot be assumed to have, so an instruction
+# using it is an instruction they cannot follow. What comes after the program
+# is not judged: see the hole named at the top of tools/docs-lint/src/main.rs.
+
+program cargo the pinned toolchain installs it, and rust-toolchain.toml is what pins it
+program git the tree is a git repository and every route here reads it
+program gh the GitHub CLI, which the workflows already run and which a maintainer uses to read the rulesets a document quotes
+program printf a shell builtin wherever these documents are followed, and the demonstrations that write exact bytes need one
+program python present on the runner image and on an ordinary developer machine, used in one record to divide two numbers in front of the reader rather than behind them
+program rustc the pinned toolchain installs it alongside cargo
+program sed present wherever a shell is, and the contributor guide uses it to read a gate's own command out of its workflow file
+
+# Tokens shaped like a path that are not one.
+#
+# The reference rule reads prose and refuses a token that names nothing git
+# tracks. These are the ones that are correctly written and correctly do not
+# resolve.
+
+reference darktable-org/darktable a repository on GitHub, read by the integration decision through the API rather than checked out here
+reference darktable-org/rawspeed a repository on GitHub, a decoder candidate weighed by the means record
+reference iderex/jellyfin-plugin-sso a repository on GitHub, the gate this project's quality parity is measured against
+reference iderex/retusche a repository on GitHub, the sibling project the scope boundary is drawn against
+reference KDE/digikam a repository on GitHub, the second application the integration decision weighed
+reference LibRaw/LibRaw a repository on GitHub, the other decoder candidate
+reference docs/decisions/NNNN-slug.md the naming rule for a decision record, written as the pattern rather than as one record
+reference tests/fixtures/ declared in .gitattributes before the first fixture lands, deliberately and with the reason on the line above the declaration

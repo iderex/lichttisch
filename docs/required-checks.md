@@ -117,6 +117,14 @@ blob, in a tree whose tests exist to assert on exact bytes.
 `bidi`. Prevents a merge of source that renders to a reviewer differently from
 how it runs.
 
+`Documentation lint`, from `.github/workflows/docs-lint.yml`, job `docs-lint`.
+Prevents a merge of documentation naming a path this tree does not have, a
+command whose program this tree never says it has, or a decision record with no
+condition that would reverse it. It judges the shape of what a document says
+and never whether it is true, which is at the top of
+`tools/docs-lint/src/main.rs` and is the part worth reading before treating a
+green tick here as a review.
+
 `Audit workflows (zizmor)`, from `.github/workflows/zizmor.yml`, job `zizmor`.
 Prevents a merge of a workflow change reintroducing template injection, an
 unpinned action, or a token wider than the job it is granted to. The name is the

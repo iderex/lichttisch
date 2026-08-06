@@ -1,0 +1,67 @@
+# The documentation lint (#103).
+#
+# The gate this project is held to checks the shape of what it writes down, and
+# this tree checks the shape of its source and nothing else. That gap matters
+# more here than it does there, because more of this project lives in documents:
+# the decision records, the gate mapping, the measurements, and later the
+# published culling quality figures. A path that stopped existing and a command
+# nobody can run are the drifts that arrive first, and both look exactly like a
+# document that is still correct.
+#
+# This job lists and nothing else. Every judgement is in `tools/docs-lint`,
+# which is a program in the workspace with a near-miss beside every rule it
+# holds. A pattern in a `run:` block cannot carry one.
+#
+# WHAT THIS CHECK CANNOT JUDGE is stated at the top of
+# `tools/docs-lint/src/main.rs` rather than restated here. In short: that a
+# reference resolves and that a command can start, never that either is right.
+#
+# The tracked list is produced here rather than inside the tool, so what is
+# examined is what git reports at the commit under test and not whatever
+# happens to be in the working directory. The tool refuses an empty list rather
+# than reporting a clean tree it never read.
+#
+# It runs on push as well as on pull request. A document is edited in the
+# browser as often as it is edited in a clone, and a push that goes straight to
+# a branch would otherwise reach the default branch unread.
+name: docs-lint
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["**"]
+
+# Read-only: the job reads the tracked tree and writes nothing anywhere.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-lint:
+    name: Documentation lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: List what git tracks, and judge the documentation against it
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP:-/tmp}"
+          git ls-files > "${work}/tracked.txt"
+          printf 'tracked=%s path(s)\n' "$(wc -l < "${work}/tracked.txt")"
+          # Built as positional parameters so every one stays quoted. An
+          # unquoted variable holding a path is the word-splitting shape that
+          # once turned a scope gate into a refusal of valid work.
+          set -- \
+            --tracked "${work}/tracked.txt" \
+            --declarations docs/lint-declarations.txt
+          cargo run --locked --quiet -p docs-lint -- "$@"

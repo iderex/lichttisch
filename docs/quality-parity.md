@@ -93,8 +93,13 @@ persona. Delivered by #21.
 
 `prettier`. Replaced by a counterpart, in two halves. Source formatting is
 checked by `.github/workflows/format-and-lint.yml`, which checks and never
-writes, delivered by #15 and landed. Documentation formatting is not checked at
-all today, and is delivered by #103.
+writes, delivered by #15 and landed. Documentation formatting is checked by
+`.github/workflows/docs-lint.yml`, which also checks and never writes,
+delivered by #103 and landed. The two halves are not equivalent: the source
+half is a formatter with a rule for every byte, and the documentation half
+holds the rules that were measured against this tree before they were written
+down. Which those are is in `tools/docs-lint/src/lint.rs`, and the one it
+deliberately does not hold is line width, with the reason at the rule.
 
 `dependency-review`. Matched, under the same name.
 `.github/workflows/dependency-review.yml`, failing closed at low severity.
@@ -121,7 +126,12 @@ neighbouring applications.
 
 A documentation lint. Carried over and widened, because this plan puts more in
 documents than that one does: decision records, measurements and the published
-quality figures. Delivered by #103.
+quality figures. Delivered by #103 and landed, as
+`.github/workflows/docs-lint.yml`. The widening is the part that is not
+formatting: a reference that resolves to nothing, a command naming a program
+this tree never says it has, and a decision record with no reversal condition
+in it. Unlike the target's, it is proposed as a merge condition rather than
+left advisory, for the reason `docs/required-checks.md` gives.
 
 A supply-chain self-audit. Already present here as
 `.github/workflows/scorecard.yml`, on the same terms it has there, which is a
