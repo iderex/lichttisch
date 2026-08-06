@@ -66,3 +66,7 @@ lichttisch -> catalogue culling foreign ingest session surface
 # The benchmark harness. It measures the modules but is not one of them and
 # nothing ships it, so it reaches nothing here.
 bench ->
+
+# The pull-request hygiene check. It reads text handed to it by a workflow, is
+# not one of the modules and nothing ships it, so it reaches nothing here.
+pr-hygiene ->

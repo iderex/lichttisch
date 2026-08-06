@@ -74,12 +74,19 @@ this line.
 commit against `DCO.md`, as a first-party check rather than an external app.
 Delivered by #21 and #20.
 
-`Deterministic PR-hygiene checks`. Not matched, and nothing here replaces it.
-`CONTRIBUTING.md` states in its own words that nothing in this tree reads a
-commit message, an issue body or a pull request body, so every rule about what
-those say is held by whoever reviews the change. That is a rule that ought to be
-enforced and is only asked for, which this project's own contributor guide says
-is an issue rather than a paragraph. Delivered by #137.
+`Deterministic PR-hygiene checks`. Replaced by a counterpart, under the name
+`Pull request hygiene`. `.github/workflows/pr-hygiene.yml` runs
+`tools/pr-hygiene`, which refuses a body that names no issue, one that names an
+issue this repository does not have, one that names an issue already closed, and
+one that drops a section the template declares. Delivered by #137, landed.
+
+What carried over is the half a machine can hold. `CONTRIBUTING.md` still states
+that nothing here reads a commit message or an issue body, and that is still
+true: the counterpart reads a pull request body and nothing else. What it cannot
+judge is whether the failure a body claims to prevent is the real one, which is a
+question about meaning, and that half stays with whoever reviews the change. The
+tool's own file says so at the top rather than leaving a green tick to be read as
+a review.
 
 `Enforce greppable invariants`. Replaced by a counterpart. The invariants worth
 grepping for differ, because the tree differs. Delivered by #102.
