@@ -9,5 +9,8 @@
 # same as any other dependency bump.
 [toolchain]
 channel = "1.97.0"
-components = ["rustfmt", "clippy"]
+# llvm-tools is what the coverage runner in .github/workflows/tests.yml reads
+# the instrumentation with (#17). Named here so a fresh clone has it rather
+# than having it fetched mid-run by the tool that needed it.
+components = ["rustfmt", "clippy", "llvm-tools"]
 profile = "minimal"
