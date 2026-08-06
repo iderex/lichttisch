@@ -59,7 +59,11 @@ jobs:
           printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
           printf 'display=%s wayland=%s\n' "${DISPLAY:-unset}" "${WAYLAND_DISPLAY:-unset}"
           for pattern in '/dev/video*' '/dev/dri/*' '/dev/nvidia*' '/dev/kfd'; do
-            found=$(sh -c "ls -1d $pattern 2>/dev/null" | tr '\n' ' ')
+            # The pattern is unquoted on purpose so the shell expands it, and
+            # ls exits non-zero when it matches nothing. Here that is the
+            # answer being asked for rather than a failure of the step, so it
+            # is caught instead of ending the run under `set -e`.
+            found=$(ls -1d $pattern 2>/dev/null | tr '\n' ' ') || found=''
             printf 'devices %s: %s\n' "$pattern" "${found:-none}"
           done
           if command -v nvidia-smi >/dev/null 2>&1; then
