@@ -1,0 +1,81 @@
+# The test gate and the coverage floor (#17).
+#
+# One command line, and the same one a contributor runs. The first half runs
+# every compiled test and measures what it reached; the second runs the
+# doctests, which the coverage runner cannot execute on a stable toolchain.
+# They run in order and stop at the first failure.
+#
+# The floor is on the whole workspace rather than per module, because the
+# runner reports one total. What that cannot catch is stated in docs/tests.md
+# rather than left to be discovered: a module arriving with no tests at all
+# hides behind a well covered neighbour until it is large enough to move the
+# total.
+#
+# The coverage runner is installed here at an exact version rather than through
+# an action, so nothing is trusted that the tree does not already trust. It
+# costs a compile on every run, which is the price of not adding a party to the
+# supply chain for a convenience.
+#
+# No job `name:`, deliberately, for the reason build.yml gives.
+#
+# This overlaps build.yml, which also runs `cargo test`. That is not waste
+# duplicated by accident: that step proves the suite runs from a plain cargo
+# with nothing installed, and this one measures. #18 is where the gate set is
+# brought under stable names and where the overlap is either kept with a reason
+# or removed.
+name: tests
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["**"]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State the conditions this run is under
+        # Printed rather than asserted. The suite claims it needs no display,
+        # no elevated rights, no camera and no accelerator, and this is the
+        # evidence for that claim rather than a sentence repeating it.
+        run: |
+          set -euo pipefail
+          printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
+          printf 'display=%s wayland=%s\n' "${DISPLAY:-unset}" "${WAYLAND_DISPLAY:-unset}"
+          for pattern in '/dev/video*' '/dev/dri/*' '/dev/nvidia*' '/dev/kfd'; do
+            found=$(sh -c "ls -1d $pattern 2>/dev/null" | tr '\n' ' ')
+            printf 'devices %s: %s\n' "$pattern" "${found:-none}"
+          done
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo 'nvidia-smi=present'
+          else
+            echo 'nvidia-smi=absent'
+          fi
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Install the coverage runner
+        run: cargo install cargo-llvm-cov --locked --version 0.8.7
+
+      - name: Run every test and measure what it reached
+        # The floor is 50 percent of lines: half, chosen to be unflattering, and
+        # set to catch a module arriving with no tests rather than to describe a
+        # suite anybody should be pleased with. Issue #100 is where the tests
+        # are actually judged, by mutation rather than by this number.
+        run: cargo llvm-cov --workspace --locked --fail-under-lines 50 && cargo test --locked --workspace --doc
