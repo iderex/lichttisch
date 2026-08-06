@@ -1,0 +1,36 @@
+# Automated dependency updates (#26).
+#
+# Updates arriving unreviewed is a risk. Updates not arriving at all is a larger
+# one, and it is the one a tree with no update route actually has: the workflows
+# here pin every action to a commit sha, and a pinned sha never moves on its own.
+#
+# One ecosystem is configured because one ecosystem is present. The tree carries
+# no package manifest yet, so there is nothing else to update; `cargo` is added
+# by the change that lands the first manifest, and adding it before then would
+# configure an updater against a directory with nothing in it.
+#
+# Routine updates are grouped into one pull request a week. Security updates are
+# deliberately left out of the group so they arrive on their own and are
+# distinguishable at a glance from routine version bumps. CONTRIBUTING.md says
+# how the two are handled differently and what a reviewer checks.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # A ceiling rather than a target: the group below normally produces one.
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "security"
+    commit-message:
+      prefix: "actions"
+    groups:
+      actions:
+        # Routine version updates only. A security update is not grouped, so it
+        # is its own pull request with its own advisory in the body.
+        applies-to: version-updates
+        patterns:
+          - "*"

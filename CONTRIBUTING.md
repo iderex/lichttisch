@@ -97,6 +97,43 @@ Where a rule that ought to be enforced is only asked for, that is an issue
 rather than a paragraph. Say so in the issue rather than tightening the wording
 here, because a firmer sentence in a document refuses nothing.
 
+## Dependency updates
+
+`.github/dependabot.yml` is the sending end. Routine version updates are grouped
+into one pull request a week rather than a dozen. A security update is
+deliberately not grouped, so it arrives on its own and is distinguishable from a
+routine bump without opening it.
+
+The two are handled differently. A routine update waits for the ordinary review
+and can sit until somebody has time for it. A security update is read first,
+because the receiving gate fails a pull request on a known advisory at low
+severity or above, and every branch opened after the advisory lands inherits the
+red. Neither is merged on the strength of being automated.
+
+Whoever reviews any other change reviews these. What they check, in this order.
+What actually moved, read from the diff rather than from the title, because the
+title is generated and the diff is the change. Whether a pinned action's new sha
+belongs to the tag the title claims, since a pin is only worth what the sha
+behind it is. Whether the release notes describe a behaviour change rather than
+a version number. And for a lock file, the lines that changed, one by one: a
+lock file is the one artefact where the diff is the whole of the change, and it
+is the one people are most tempted to accept unread. A lock file that is trusted
+rather than read is a supply chain with no review in it.
+
+The sign-off gate exempts two automation identities, `dependabot[bot]` and
+`github-actions[bot]`, in both the plain and the numeric-prefixed spelling of
+their addresses:
+
+    git grep -c 'bot\]@users.noreply.github.com' -- .github/workflows/dco.yml
+    .github/workflows/dco.yml:4
+
+They are exempt because a bot cannot assert the certificate in [DCO.md](DCO.md)
+on its own behalf; the assertion is a statement by a person about work they have
+the right to submit. The allowlist names those two identities exactly rather
+than matching any address shaped like a bot, so a person cannot exempt
+themselves by choosing an address that ends the right way. Adding a third
+identity is a change to that gate, argued in its own issue.
+
 ## Text and bytes
 
 `.gitattributes` decides what reaches git, and
