@@ -134,11 +134,7 @@ fn reached_by(member: &str) -> BTreeSet<String> {
     reached
 }
 
-/// The declaration, parsed.
-///
-/// A line that is neither blank, nor a comment, nor of the declared shape
-/// fails here rather than being skipped. A declaration a reader can mistype
-/// into silence is not a declaration.
+/// The declaration on disk, parsed.
 fn declaration() -> BTreeMap<String, BTreeSet<String>> {
     let path = workspace_root().join(DECLARATION);
     let text = match std::fs::read_to_string(&path) {
@@ -147,14 +143,37 @@ fn declaration() -> BTreeMap<String, BTreeSet<String>> {
             panic!("{DECLARATION} could not be read, so nothing declares the direction: {err}")
         }
     };
+    parse(&text)
+}
 
+/// The declaration, parsed out of the bytes it was written in.
+///
+/// A line that is neither blank, nor a comment, nor of the declared shape
+/// fails here rather than being skipped. A declaration a reader can mistype
+/// into silence is not a declaration.
+///
+/// A carriage return anywhere in the text fails for the same reason and it is
+/// the less obvious half. `lines` splits on the line feed alone, so a lone
+/// carriage return is not a line break here while an editor may well draw it
+/// as one. `catalogue ->` followed by a carriage return and `foreign` is two
+/// lines on the screen and one line to this parser, and the line it reads
+/// grants the catalogue the reach the file appears to withhold. That is a
+/// permission nobody wrote, arriving from a byte nobody sees, which is why it
+/// is refused rather than trimmed.
+fn parse(text: &str) -> BTreeMap<String, BTreeSet<String>> {
     let mut declared = BTreeMap::new();
     for (index, line) in text.lines().enumerate() {
+        let number = index + 1;
+        assert!(
+            !line.contains('\r'),
+            "{DECLARATION}:{number} carries a carriage return, so what this \
+             parser reads as one line may be drawn as two. Remove the byte; a \
+             line break here is a line feed.\n"
+        );
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let number = index + 1;
         let Some((member, reaches)) = line.split_once("->") else {
             panic!(
                 "{DECLARATION}:{number} is not a declaration and was not \
@@ -233,5 +252,110 @@ fn no_module_reaches_further_than_it_declares() {
          one. Either the dependency does not belong there, or the line that \
          permits it is a change somebody argues.\n",
         offending.join("\n    ")
+    );
+}
+
+/// Exact bytes, in the source, base64-encoded.
+///
+/// The convention is `docs/text-and-line-endings.md` and this is its first
+/// user. A raw literal would not do: `.gitattributes` declares `text=auto
+/// eol=lf` for everything not otherwise named, so a carriage-return pair
+/// written into a source file is normalised away on the way into git and the
+/// fixture would prove the parser's behaviour on bytes it never saw. Base64 is
+/// ordinary text under every rule in this tree, nothing rewrites it, and the
+/// unicode guard still reads the file it sits in.
+fn b64(encoded: &str) -> Vec<u8> {
+    fn sextet(byte: u8) -> Option<u32> {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        };
+        Some(u32::from(value))
+    }
+
+    let mut bits = 0_u32;
+    let mut held = 0_u32;
+    let mut bytes = Vec::new();
+    for byte in encoded.bytes().filter(|byte| *byte != b'=') {
+        let Some(value) = sextet(byte) else {
+            panic!("the fixture is not base64: it carries the byte {byte:#04x}")
+        };
+        bits = (bits << 6) | value;
+        held += 6;
+        if held >= 8 {
+            held -= 8;
+            #[allow(clippy::cast_possible_truncation, reason = "masked to a byte")]
+            bytes.push(((bits >> held) & 0xff) as u8);
+        }
+    }
+    bytes
+}
+
+/// The fixture, and the neighbour it differs from by one byte.
+///
+/// `catalogue ->` then a lone carriage return then `foreign`, and the same
+/// text with a space where the carriage return was. An editor honouring the
+/// carriage return draws the first as two lines, the second of which grants
+/// nothing, and this parser reads it as one line granting the catalogue reach
+/// into the foreign-function surface.
+const DECLARATION_WITH_A_LONE_CARRIAGE_RETURN: &str = "Y2F0YWxvZ3VlIC0+DWZvcmVpZ24K";
+const THE_SAME_WITHOUT_IT: &str = "Y2F0YWxvZ3VlIC0+IGZvcmVpZ24K";
+
+#[allow(clippy::expect_used, reason = "a fixture that is not text is a broken fixture")]
+fn fixture(encoded: &str) -> String {
+    String::from_utf8(b64(encoded)).expect("the fixture decodes to text")
+}
+
+#[test]
+fn the_fixture_carries_the_byte_it_exists_to_carry() {
+    // Without this leg the two below prove nothing about carriage returns:
+    // a fixture that lost the byte on the way in would still make the parser
+    // refuse or accept for some other reason, and the pair would look green.
+    let text = fixture(DECLARATION_WITH_A_LONE_CARRIAGE_RETURN);
+    assert!(
+        text.contains('\r') && !text.contains("\r\n"),
+        "the fixture is meant to carry one carriage return that is not part of \
+         a pair, and it carries {text:?}"
+    );
+    assert!(
+        !fixture(THE_SAME_WITHOUT_IT).contains('\r'),
+        "the neighbour is meant to differ by exactly that byte"
+    );
+}
+
+#[test]
+fn a_lone_carriage_return_in_the_declaration_is_refused() {
+    let refused = std::panic::catch_unwind(|| {
+        // The hook is silenced so a deliberate panic does not print a backtrace
+        // that reads like a failure in a green run.
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let result = parse(&fixture(DECLARATION_WITH_A_LONE_CARRIAGE_RETURN));
+        std::panic::set_hook(previous);
+        result
+    });
+    assert!(
+        refused.is_err(),
+        "a lone carriage return was read as ordinary text, so a line the file \
+         appears to withhold was granted: {refused:?}"
+    );
+}
+
+#[test]
+fn the_same_declaration_without_that_byte_is_read() {
+    let declared = parse(&fixture(THE_SAME_WITHOUT_IT));
+    let reaches = declared
+        .get("catalogue")
+        .cloned()
+        .unwrap_or_else(|| panic!("the neighbour fixture declares nothing for the catalogue"));
+    assert_eq!(
+        reaches,
+        ["foreign".to_owned()].into_iter().collect::<BTreeSet<_>>(),
+        "the neighbour fixture is one byte from the refused one and has to be \
+         read, or the leg above proves only that the parser refuses something"
     );
 }
