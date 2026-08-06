@@ -1,0 +1,13 @@
+# The toolchain the build reads (#14).
+#
+# An exact version rather than a channel. "stable" resolves to whatever is
+# newest on the day, so two machines building the same commit can disagree
+# about what the compiler accepted, and a build that broke would be a fact
+# about the calendar rather than about the tree.
+#
+# Raising it is a deliberate change with the reason in its commit message, the
+# same as any other dependency bump.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

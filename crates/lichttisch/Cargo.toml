@@ -1,0 +1,13 @@
+[package]
+name = "lichttisch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catalogue.workspace = true
+ingest.workspace = true
+session.workspace = true
+surface.workspace = true

@@ -1,0 +1,70 @@
+# The build (#14, and the first of the gates #18 has to bring under stable
+# names).
+#
+# It exists here because one of #14's conditions cannot be shown on a developer
+# machine: that the build runs where there is no display and no elevated rights.
+# The run prints both facts rather than asserting them, so the evidence is in
+# the log rather than in a sentence somebody wrote.
+#
+# No job `name:`, deliberately. A check run is matched by its literal name, and
+# with no name set that name is the job id, which cannot drift apart from a
+# label somebody typed twice. The dependency review workflow already does this
+# and says why.
+#
+# `--locked` is the right instrument for lock drift in a workflow step: it
+# refuses to rewrite the lock and fails instead. Inside a test it cannot fail,
+# because the build has already repaired the lock by the time a test runs, which
+# is measured in crates/lichttisch/tests/lock_file_is_current.rs and is why that
+# guard asks git instead.
+name: build
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["**"]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref. Nothing here is left half done by
+# being cancelled: the job writes nothing outside its own runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State the conditions this run is under
+        run: |
+          set -euo pipefail
+          echo "user=$(id -un) uid=$(id -u)"
+          echo "display=${DISPLAY:-unset}"
+          echo "wayland=${WAYLAND_DISPLAY:-unset}"
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Build the workspace
+        # rustup reads rust-toolchain.toml and installs the pinned version, so
+        # the toolchain is not chosen here and cannot disagree with the tree.
+        run: cargo build --locked --workspace
+
+      - name: Run the tests
+        run: cargo test --locked --workspace
+
+      - name: Start the binary with no arguments and no configuration
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          "${GITHUB_WORKSPACE}/target/debug/lichttisch"
+          echo "exit=$?"
