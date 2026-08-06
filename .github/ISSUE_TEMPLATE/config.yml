@@ -1,0 +1,6 @@
+# Issue templates are the default route rather than a reminder (#24): a blank
+# issue is the one that states no problem, no evidence and no done-condition,
+# which is what the forms exist to refuse. This closes the route through the web
+# interface only. An issue opened through the API still bypasses every form, so
+# this is a default and not a rule.
+blank_issues_enabled: false

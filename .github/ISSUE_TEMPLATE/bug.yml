@@ -1,0 +1,61 @@
+# The bug form (#24). The same three fields as the change form, plus the two
+# things a photograph-handling bug cannot be reproduced without, and one rule
+# about what must not be attached.
+name: Bug
+description: Something behaves wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Do not attach a photograph. This project exists so that photographs stay
+        on the machine they are on, and an attachment here is public and
+        permanent. A synthetic file that reproduces the same failure is what is
+        wanted; where you cannot make one, describe the file instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: The evidence
+      description: >
+        The exact command or the exact sequence, and what came back. A number
+        carries the command that produced it.
+    validations:
+      required: true
+
+  - type: input
+    id: format
+    attributes:
+      label: Camera and file format
+      description: >
+        The camera model and the file extension involved, or "none" where the
+        failure does not involve a file at all.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproducer
+    attributes:
+      label: Can you share a synthetic reproducer
+      description: A generated or stripped file that fails the same way, carrying nobody's picture.
+      options:
+        - "Yes, and it is attached"
+        - "Yes, but I have not made it yet"
+        - "No, and here is why in the evidence above"
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What would tell you this is fixed.
+    validations:
+      required: true

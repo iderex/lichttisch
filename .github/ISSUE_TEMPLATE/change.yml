@@ -1,0 +1,50 @@
+# The general issue form (#24). Three required fields, because an issue that
+# states no problem, no evidence and no done-condition is the shape this form
+# exists to refuse. A form field marked required is refused empty by GitHub when
+# the issue is opened through it; an issue opened through the API is not, and
+# nothing in this tree reads a body afterwards.
+name: Change
+description: Something to build, fix or decide
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: The problem, not the solution. What is missing, broken or undecided, and who meets it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: The evidence
+      description: >
+        What makes this true. A number carries the command that produced it, pasted
+        with its output. A claim you have not checked is written as a claim.
+      placeholder: |
+        git ls-files .github/workflows | wc -l
+        6
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: >
+        One condition per line, each one something a reader can check rather than
+        judge. If a condition cannot be checked, say what would make it checkable.
+      placeholder: |
+        - docs/example.md exists and states X.
+        - The check refuses Y, proven by removing the guard and watching the suite go red.
+    validations:
+      required: true
+
+  - type: input
+    id: scope
+    attributes:
+      label: Scope
+      description: The paths this change is allowed to touch, comma separated.
+      placeholder: docs/decisions/
+    validations:
+      required: true
