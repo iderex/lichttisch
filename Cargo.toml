@@ -1,0 +1,39 @@
+# The workspace (#14).
+#
+# One module per boundary the means record argues for, and the dependency
+# direction is declared in each member's own manifest rather than left to
+# habit. Everything points downward: `foreign` and `catalogue` depend on
+# nothing here, and nothing depends on `surface` except the binary. Issue #19
+# is where that direction stops being a convention and becomes a test.
+#
+# Most of these are empty. They exist now so that the first change to each one
+# is a change inside a boundary rather than a change that invents one.
+[workspace]
+resolver = "3"
+members = [
+    "crates/catalogue",
+    "crates/culling",
+    "crates/foreign",
+    "crates/ingest",
+    "crates/lichttisch",
+    "crates/session",
+    "crates/surface",
+]
+
+# Shared by every member so a version, an edition or a licence is stated once.
+# The version is 0.0.0 deliberately: issue #120 decides what a version number
+# promises here, and nothing should read a promise into one before it does.
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97.0"
+license = "AGPL-3.0-only"
+repository = "https://github.com/iderex/lichttisch"
+
+[workspace.dependencies]
+catalogue = { path = "crates/catalogue" }
+culling = { path = "crates/culling" }
+foreign = { path = "crates/foreign" }
+ingest = { path = "crates/ingest" }
+session = { path = "crates/session" }
+surface = { path = "crates/surface" }

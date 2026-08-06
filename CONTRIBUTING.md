@@ -33,6 +33,30 @@ existing commits:
 Not by adding a commit that signs off on behalf of the earlier ones. The gate
 reads every non-merge commit in the range, so the earlier ones are still there.
 
+## Building
+
+One command, from a fresh clone:
+
+    cargo build
+
+`rust-toolchain.toml` pins the compiler to an exact version and rustup installs
+that version on first use, so nothing has to be chosen or matched by hand and
+two machines building one commit are building it with one compiler.
+
+    cargo test
+    cargo run -p lichttisch
+
+The suite includes a guard that fails when the lock file on disk stops matching
+the one git will record. A build repairs a stale lock in place and says nothing,
+so without that guard the drift arrives later as an unexplained line in somebody
+else's diff. The failure prints the command that repairs it and repairs nothing
+itself.
+
+Most of the modules under `crates/` are empty. They exist so that the first
+change to each one is a change inside a boundary rather than a change that
+invents one, and the dependency direction between them is declared in each
+manifest.
+
 ## The gates, and running them before you push
 
 The tree is the authority for which gates exist. This document names the
