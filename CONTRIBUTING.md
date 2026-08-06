@@ -75,6 +75,20 @@ This document deliberately does not copy those commands into itself. A copy
 would be a second place holding a gate's logic, and the two would stop agreeing
 on the day one of them changed.
 
+One command is named here, and it is named because it is not a gate. The
+formatting gate checks and never writes, so when it goes red the repair is a
+command a person runs:
+
+    cargo fmt --all
+
+It rewrites the tree to the shape `rustfmt.toml` declares. Nothing in the
+automated checks runs it, and nothing should: a gate that repaired what it
+found would put a diff nobody asked for into somebody else's review. The
+lint half of that gate has no equivalent, because a lint failure is a question
+about the code rather than about its shape, and `--fix` answering it
+automatically is how a real finding gets papered over. What the gate itself
+runs stays in its own workflow file, the same as every other gate.
+
 There is no single command that runs every gate locally, and there is no local
 hook that runs them for you. Two of the gates cannot run off GitHub at all: one
 asks GitHub's advisory database about the dependencies a pull request changes,

@@ -9,3 +9,8 @@ repository.workspace = true
 [dependencies]
 catalogue.workspace = true
 foreign.workspace = true
+
+# Take the lint set from the workspace root (#15). A member without these two
+# lines is linted at the default levels and is quietly outside the set.
+[lints]
+workspace = true

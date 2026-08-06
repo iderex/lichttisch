@@ -1,0 +1,29 @@
+# How this project's Rust is formatted (#15).
+#
+# Short on purpose. rustfmt's defaults are the shape most Rust readers already
+# have in their eye, and every departure from them is one more thing a
+# contributor has to learn before their first change is accepted. Only settings
+# with a reason of their own are here, and each carries it.
+
+# Stored line endings are LF. That is declared in .gitattributes and checked by
+# .github/workflows/line-endings.yml, and docs/text-and-line-endings.md is
+# where it is argued. Saying it here as well means the formatter agrees with
+# the guard rather than proposing a rewrite on a checkout where the working
+# tree carries CRLF.
+newline_style = "Unix"
+
+# The style rules of the edition this workspace compiles under, which
+# Cargo.toml sets to 2024. Left unset, the answer depends on how rustfmt was
+# reached: `cargo fmt` passes the edition from the manifest and a bare
+# `rustfmt` does not, so two people running "the formatter" could get two
+# results. Named here, the file decides.
+style_edition = "2024"
+
+# An attribute may fill the line the way ordinary code may.
+#
+# The default width for an attribute's contents is narrower than the line
+# width, so `#[allow(lint, reason = "...")]` is split across four lines and the
+# reason ends up somewhere other than the line the lint is on. This project
+# asks for the reason on that line, so the width is raised to meet it rather
+# than the reason being cut down until it fits.
+attr_fn_like_width = 100

@@ -1,0 +1,61 @@
+# The formatting and lint gate (#15).
+#
+# One command, and the same one a contributor runs. It checks and never writes:
+# a gate that silently reformatted the tree would teach contributors that the
+# rule does not exist, and the diff it produced would arrive in somebody else's
+# review.
+#
+# The two halves run in order and the run stops at the first failure, which is
+# what `&&` buys. A formatting failure therefore hides any lint failure behind
+# it, which is deliberate rather than overlooked: the repair for the first is
+# one command and re-running is cheap, and a log holding both kinds of failure
+# is a log nobody reads to the end.
+#
+# There is no `-D warnings` on the command line here, and that absence is the
+# point. The lint set and its levels are declared in the workspace manifest, so
+# this run and a local run read the same table and cannot disagree about which
+# lints are on. Cargo.toml is the authority; this file only names when it runs.
+#
+# No job `name:`, deliberately, for the reason build.yml gives: with no name
+# set the check run's name is the job id, which cannot drift apart from a label
+# somebody typed twice.
+name: format-and-lint
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["**"]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format-and-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State which compiler judged the tree
+        # rustup reads rust-toolchain.toml and installs the pinned version, so
+        # the toolchain is not chosen here. Printed because a formatting or
+        # lint verdict is a verdict of one exact rustfmt and one exact clippy,
+        # and a log that does not say which is a log that cannot be reproduced.
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain
+          cargo fmt --version
+          cargo clippy --version
+
+      - name: Check formatting and lint across every module
+        run: cargo fmt --all --check && cargo clippy --workspace --all-targets --locked

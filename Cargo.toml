@@ -37,3 +37,47 @@ foreign = { path = "crates/foreign" }
 ingest = { path = "crates/ingest" }
 session = { path = "crates/session" }
 surface = { path = "crates/surface" }
+
+# The lint set (#15).
+#
+# Declared here rather than passed on a command line, so a local run and the
+# automated check cannot disagree about which lints are on. Every member
+# manifest carries `[lints] workspace = true`, which is what makes this table
+# reach that member; a new module that omits it is linted at the default
+# levels and is quietly outside the set, which is the one hole in this
+# arrangement and is stated rather than left to be found.
+#
+# `warnings = "deny"` is what makes a warning an error, and it applies to
+# `cargo build` and `cargo test` as well as to `cargo clippy`. That is
+# deliberate: a warning nobody sees on the machine where the code is written
+# is a warning that arrives as a red check somebody else has to read. It is
+# affordable here only because rust-toolchain.toml pins an exact compiler, so
+# a new lint cannot arrive on its own and redden a tree nobody touched.
+[workspace.lints.rust]
+warnings = { level = "deny", priority = -100 }
+
+# Written before there is unsafe code to argue about. `foreign` is the one
+# module that will need it, and the allowance belongs at the smallest scope
+# that works, with its reason on the line: a crate-level `#![allow(unsafe_code)]`
+# there rather than a hole in this table. Issue #40 is where the size of that
+# surface becomes a number.
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+# Groups first, at a lower priority, so a named lint below can still override
+# one of them. Cargo applies this table in priority order.
+pedantic = { level = "warn", priority = -1 }
+
+# An `unwrap` or an `expect` in shipped code is a crash with nothing said about
+# what went wrong, in a program a photographer runs over their own archive.
+# Both are set to `warn` and the `warnings` entry above is what turns them into
+# errors, so the level here reads as the lint's own and the escalation lives in
+# one place.
+#
+# Tests are where stopping dead is the correct behaviour, and that allowance is
+# written at the site rather than as an exemption here. There are two in the
+# tree today:
+#
+#     git grep -n 'allow(clippy::expect_used' -- crates/
+unwrap_used = "warn"
+expect_used = "warn"
