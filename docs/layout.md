@@ -3,45 +3,46 @@
 Issue: #22
 
 Where a change belongs, without reading every module first. This note says what
-each module is for and what it may not depend on. It does not enumerate the
-files, the checks or the graph, because a copy of any of those in a document
-drifts against the thing it describes and nothing notices.
+each module is for and why the direction between them runs the way it does. It
+does not enumerate the files, the checks or the graph, and since #19 it does
+not carry the permission list either: `crates/module-boundaries.txt` holds
+that, and a test refuses it when it stops being true. A copy of any of those in
+a document drifts against the thing it describes and nothing notices.
 
 ## The modules
 
-Each one is a crate under `crates/`, and each manifest declares its own
-dependencies, so the direction below is read out of the tree rather than
-promised here.
+Each one is a crate under `crates/`. What each may reach is on its own line in
+`crates/module-boundaries.txt`, with the reason on the lines above it, so the
+paragraphs here say what a module is for rather than repeating what it is
+allowed to touch.
 
-`crates/catalogue` holds the catalogue and its storage. It depends on no other
-module in this workspace. Nothing above it composes a query in the storage
-engine's own language, which is the rule that makes a later engine change a
-change in one directory rather than a search across the tree.
+`crates/catalogue` holds the catalogue and its storage. Nothing above it
+composes a query in the storage engine's own language, which is the rule that
+makes a later engine change a change in one directory rather than a search
+across the tree. It parses nothing that arrived from a card, a camera or a
+stranger, and that is the boundary #19 is about.
 
-`crates/foreign` holds the whole foreign-function surface and depends on no
-other module. Every declaration of a foreign function and every conversion of a
-foreign value into a Rust one lives here.
+`crates/foreign` holds the whole foreign-function surface. Every declaration of
+a foreign function and every conversion of a foreign value into a Rust one
+lives here.
 
 `crates/ingest` holds ingest and decoding. It is the only module allowed to
-depend on an image library, and it reaches one only through `crates/foreign`. It
-may depend on `crates/catalogue`. It may not depend on the session, the surface
-or the signals.
+reach an image library, and it reaches one only through `crates/foreign`, which
+is what keeps a fuzzer pointed at decoding pointed at something.
 
 `crates/culling` holds the culling signals. It is the only module allowed to
-depend on an inference runtime, and it reaches one only through
-`crates/foreign`. It may depend on `crates/catalogue`. It may not depend on the
-session or the surface, because a signal that knows what the operator is doing
-is a signal that can be tuned to please them.
+reach an inference runtime, and it reaches one only through `crates/foreign`. It
+stays clear of the session, because a signal that knows what the operator is
+doing is a signal that can be tuned to please them.
 
-`crates/session` holds the culling session as a headless state machine. It may
-depend on `crates/catalogue` and `crates/culling`. It draws nothing and it may
-not depend on the surface.
+`crates/session` holds the culling session as a headless state machine. It
+draws nothing, and it stays clear of the surface so that the thing holding the
+state cannot depend on the thing drawing it.
 
-`crates/surface` holds the operator surface as a thin renderer over the session.
-It may depend on `crates/session` and decides nothing. Whether this project
-ships a surface of its own at all is entry 5 of issue #13 and it is open; this
-module exists so that the session is written against a boundary rather than
-against a window.
+`crates/surface` holds the operator surface as a thin renderer over the session,
+and decides nothing. Whether this project ships a surface of its own at all is
+entry 5 of issue #13 and it is open; this module exists so that the session is
+written against a boundary rather than against a window.
 
 `crates/lichttisch` is the binary. It depends on the modules it composes and
 holds no logic of its own.
@@ -75,20 +76,38 @@ than an impression.
 
 ## What enforces the direction
 
-Nothing does today, and this note says so rather than implying otherwise. The
-manifests declare the direction and cargo refuses a dependency that is not
-declared, so a module cannot reach another one by accident. What cargo does not
-refuse is a manifest edit that adds the wrong dependency on purpose.
+`crates/lichttisch/tests/module_boundaries.rs`, against the declaration in
+`crates/module-boundaries.txt`.
 
-Issue #19 is where the boundary between the catalogue and everything that
-decodes an image becomes a test, and issue #105 is where the rest of the rules
-above become tests. Until those land, the direction in this note is held by
-whoever reviews a manifest change.
+The rule it holds is the one #19 states. A module may reach only the packages
+its own line names, whether the dependency is written in that module's manifest
+or arrives through another one. The catalogue's line is empty, which is how "no
+image library and no metadata library, directly or through anything else" is
+said in a form something can refuse. A member with no line at all fails rather
+than passing by default, so a new module cannot arrive unplaced, and a line
+naming a member the workspace no longer has fails as well, so a permission does
+not outlive the module it was written for.
 
-The one guard in the workspace today is
-`crates/lichttisch/tests/lock_file_is_current.rs`, and it is about the lock file
-rather than about these boundaries. It is named here so that nobody reads the
-existence of a test directory as the existence of a boundary test.
+What that adds to what cargo already does is the part worth being exact about.
+Cargo refuses a dependency that is not declared, so no module reaches another
+one by accident. It has nothing to say about a manifest edit that adds the
+wrong dependency on purpose, and nothing at all to say about a library that
+arrives three levels down behind a feature somebody turned on.
+
+The test does not read the manifests itself. It asks `cargo tree` what the
+resolver actually reaches, with dev and build edges excluded, every feature
+enabled and every target included, because a dependency that is optional today
+or declared for one platform only is still a dependency of the module that
+carries it.
+
+The bound, stated rather than left to be found: a line may permit a package
+that nothing reaches any more, and nothing refuses a permission that has gone
+stale. The rules this note states that are not about the dependency direction,
+the foreign-function surface among them, are issue #105 and are held by
+whoever reviews a change until it lands.
+
+`crates/lichttisch/tests/lock_file_is_current.rs` is the other guard in the
+workspace, and it is about the lock file rather than about these boundaries.
 
 ## Everything else
 

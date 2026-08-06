@@ -1,0 +1,64 @@
+# Which module may reach which, and how far (#19).
+#
+# One line per workspace member. On the left, the member. On the right, every
+# package its normal dependencies reach, directly or through anything else. A
+# package that reaches a member's tree without being on that member's line is
+# refused, and the refusal names the edge.
+#
+# crates/lichttisch/tests/module_boundaries.rs is the test that reads this file
+# and it is the whole of the enforcement. docs/layout.md says what each module
+# is for and why the direction runs the way it does, and it does not repeat
+# what is declared here.
+#
+# The grammar is one line per member:
+#
+#     <member> -> <package> <package> ...
+#
+# An empty right-hand side means the member reaches nothing at all. A blank
+# line and a line starting with # are ignored. Anything else fails the parse
+# rather than being skipped, because a declaration a reader can mistype into
+# silence is not a declaration.
+#
+# A member missing from this file fails rather than passing by default, so a
+# new module has to say where it sits before the suite is green. A line naming
+# a member the workspace does not have fails the same way, so a module that is
+# removed does not leave a permission behind it.
+#
+# The right-hand sides name packages rather than only modules, so an external
+# crate is declared here as well. That is deliberate and it is what makes the
+# first rule below a rule rather than a hope.
+
+# The catalogue answers queries. It parses nothing that arrived from a card, a
+# camera or a stranger, and the empty right-hand side is that rule: no image
+# library and no metadata library, directly or through anything else.
+#
+# It is empty rather than naming the libraries that are forbidden. A list of
+# refused names only refuses the ones somebody thought of, and the one that
+# matters is the one nobody had heard of when the list was written.
+catalogue ->
+
+# The whole foreign-function surface. It reaches no module here. What it will
+# reach outside this workspace is the decoder in issue #39 and the inference
+# runtime in issue #50, and each is declared on this line when it lands, in a
+# change somebody argues rather than in a manifest edit nobody reads.
+foreign ->
+
+# Ingest and decoding. It reaches an image library only through foreign, which
+# is what keeps a fuzzer pointed at decoding pointed at something.
+ingest -> catalogue foreign
+
+# The culling signals. They reach an inference runtime only through foreign.
+# They may not reach the session: a signal that knows what the operator is
+# doing is a signal that can be tuned to please them.
+culling -> catalogue foreign
+
+# The culling session, headless. It may not reach the surface, so that the
+# thing holding the state cannot depend on the thing drawing it.
+session -> catalogue culling foreign
+
+# The renderer over the session. It decides nothing and nothing here depends on
+# it except the binary.
+surface -> catalogue culling foreign session
+
+# The binary composes the modules and holds no logic of its own.
+lichttisch -> catalogue culling foreign ingest session surface
