@@ -49,6 +49,27 @@ behaviour is pinned. Issue #100 is where the tests are judged by mutation
 rather than by this number, and reaching the floor should be read as saying
 nothing flattering at all.
 
+## What the check's environment actually is
+
+The gate prints the conditions it ran under rather than asserting them, and the
+printed answer is not uniformly the convenient one. On its first green run the
+step reported a non-root user, no display, no Wayland display, no camera node,
+no NVIDIA node, no `/dev/kfd` and no accelerator tool on the path, and one DRM
+node present:
+
+    user=runner uid=1001
+    display=unset wayland=unset
+    devices /dev/video*: none
+    devices /dev/dri/*: /dev/dri/card1
+    devices /dev/nvidia*: none
+    devices /dev/kfd: none
+    nvidia-smi=absent
+
+So the run is unelevated, without a display and without a camera, and a device
+node exists that nothing in this project reaches. That is written down rather
+than rounded off, because the claim a later reader will want to lean on is
+about what the suite needs, and the log is what they will check it against.
+
 ## A test that cannot run here
 
 Some tests will need a camera on the end of a cable, an accelerator, or a

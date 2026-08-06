@@ -54,6 +54,13 @@ jobs:
         # Printed rather than asserted. The suite claims it needs no display,
         # no elevated rights, no camera and no accelerator, and this is the
         # evidence for that claim rather than a sentence repeating it.
+        #
+        # The evidence is not all one way and the step prints it either way.
+        # The first run of this gate reported a DRM node present, /dev/dri/card1,
+        # on a runner with no display, no camera node and no accelerator tool.
+        # So "no accelerator" is not what this output says. What it says is that
+        # nothing here reaches one, and the node is named rather than left out
+        # so that a later reader is not told something the log contradicts.
         run: |
           set -euo pipefail
           printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
