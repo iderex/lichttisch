@@ -1,0 +1,127 @@
+# Carriage-return guard (#23).
+#
+# This project will assert on parser behaviour over exact bytes, so a text file
+# that reached git carrying a carriage return is not a cosmetic problem: it is a
+# byte nobody chose, in a tree whose tests exist to prove what happens to bytes
+# somebody did choose.
+#
+# What this catches, and what it does not, because the two are easy to confuse.
+# `.gitattributes` declares `* text=auto eol=lf`, and that declaration alone
+# removes a CRLF pair on the way into git, so the ordinary Windows editor case
+# never reaches a blob and this guard would never see it. Two cases do reach a
+# blob, and they are the ones the guard is for:
+#
+#   1. A LONE carriage return. Normalisation rewrites CRLF and leaves a bare CR
+#      alone, so a value pasted out of a terminal that overwrote itself, or a
+#      file with old Mac line endings, is stored exactly as it arrived. It looks
+#      correct in an editor and in the rendered diff.
+#   2. A blob that entered the tree before the declaration covered it. Storage
+#      already happened, so nothing normalises it afterwards.
+#
+# The guard reads the STORED blob, never the working tree, because the working
+# tree is whatever the checkout wrote and the checkout is what would hide the
+# problem. It exempts a path only where `.gitattributes` declares `eol=crlf`,
+# and it asks git for that rather than carrying a list of its own, so the
+# declaration and the exemption cannot drift apart.
+#
+# Fail-closed: a scanner that cannot run reds the job rather than passing a tree
+# it never read. The run prints what it examined, what it exempted and what it
+# skipped as binary, so a run that covered less than the tracked set cannot be
+# read as one that covered it and found nothing.
+name: line-endings
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# Read-only: the guard only reads git.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref; re-verification is cheap and
+# idempotent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  carriage-return:
+    name: Reject stored carriage returns
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: Reject a carriage return in a stored text blob
+        run: |
+          set -euo pipefail
+
+          work="${RUNNER_TEMP:-/tmp}"
+          attrs="${work}/attrs.z"
+          exempt="${work}/exempt.txt"
+          hits="${work}/hits.txt"
+          : > "$exempt"
+
+          # One pass for the attributes of every tracked path. Guarded
+          # explicitly: a pipeline failure here would leave an empty file, and a
+          # loop over nothing passes with nothing verified, which is fail-open.
+          if ! git ls-files -z | git check-attr --stdin -z text eol > "$attrs"; then
+            echo "::error::Could not read git attributes for the tracked tree. Failing closed."
+            exit 1
+          fi
+
+          tracked=0
+          binary=0
+          exempted=0
+          while IFS= read -r -d '' path && IFS= read -r -d '' attr && IFS= read -r -d '' value; do
+            if [ "$attr" = "text" ]; then
+              tracked=$((tracked + 1))
+              if [ "$value" = "unset" ]; then
+                binary=$((binary + 1))
+              fi
+            elif [ "$attr" = "eol" ] && [ "$value" = "crlf" ]; then
+              exempted=$((exempted + 1))
+              printf '%s\n' "$path" >> "$exempt"
+              echo "exempt  $path (.gitattributes declares eol=crlf)"
+            fi
+          done < "$attrs"
+
+          # One pass for the content. --cached reads the blob git stores. -I
+          # skips what .gitattributes declares binary, which is the fixture
+          # directory and the image formats, so a fixture keeps its exact bytes
+          # without the guard objecting to them.
+          # git grep: 0 = a match was found, 1 = clean, >=2 = scanner error.
+          rc=0
+          git grep --cached -I -l -P '\r' -- . > "$hits" || rc=$?
+          case "$rc" in
+            0) ;;
+            1) : > "$hits" ;;
+            *)
+              echo "::error::git grep exited ${rc} while scanning for carriage returns. Failing closed instead of mistaking a broken scanner for a clean tree."
+              exit 1
+              ;;
+          esac
+
+          fail=0
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if grep -qxF "$path" "$exempt"; then
+              continue
+            fi
+            echo "FAIL    $path carries a carriage return in the blob git stores"
+            fail=1
+          done < "$hits"
+
+          echo "tracked=${tracked} binary=${binary} exempt=${exempted} examined=$((tracked - binary - exempted))"
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::A tracked text file carries a carriage return in the blob git stores. Strip it, or declare the path binary or eol=crlf in .gitattributes with the reason on the line above. See docs/text-and-line-endings.md."
+            exit 1
+          fi
+          echo "No carriage return in any examined text blob."
