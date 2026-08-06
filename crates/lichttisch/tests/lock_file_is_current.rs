@@ -26,6 +26,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[allow(clippy::expect_used, reason = "a guard that cannot find its tree stops")]
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -52,6 +53,7 @@ fn git(args: &[&str]) -> Output {
 }
 
 #[test]
+#[allow(clippy::expect_used, reason = "no git means the guard could not run")]
 fn lock_file_is_tracked() {
     // Without this leg the guard below has a hole it cannot see: an untracked
     // lock file differs from nothing, so every comparison passes and the tree
