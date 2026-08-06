@@ -1,0 +1,63 @@
+# How git treats the bytes in this tree.
+#
+# Declared here rather than inherited from whatever core.autocrlf a contributor
+# happens to have, so the same commit produces the same blob on every machine.
+# docs/text-and-line-endings.md is where the reasoning lives; this file is the
+# declaration and the check derives its exemptions from it rather than carrying
+# a list of its own.
+
+# Default. Git decides what is text, and every text path is stored and checked
+# out with LF. Nothing here is stored with a carriage return unless a line
+# below declares it and says why.
+* text=auto eol=lf
+
+# Fixture bytes are exact.
+#
+# A fixture exists to prove what a parser does with one specific byte sequence.
+# Normalisation on the way into git would silently delete the carriage return
+# that a fixture was written to carry, and the test would then pass for a
+# reason nobody chose. Declared binary so no byte is ever rewritten, and marked
+# -diff because a diff of exact bytes pretends to be readable and is not.
+#
+# The directory does not exist yet. It is declared before the first fixture
+# lands rather than after, because a fixture committed under the default rule
+# above has already been normalised by the time anybody notices.
+tests/fixtures/** -text -diff
+
+# Formats whose content is binary. Declared rather than left to git's guess,
+# because the guess reads the first bytes of the file and a small or unusual
+# file can be guessed wrong.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary
+*.webp binary
+*.avif binary
+*.heic binary
+*.heif binary
+*.dng binary
+*.cr2 binary
+*.cr3 binary
+*.nef binary
+*.arw binary
+*.raf binary
+*.orf binary
+*.rw2 binary
+*.icc binary
+*.icm binary
+*.tflite binary
+*.onnx binary
+*.zip binary
+*.gz binary
+
+# Carriage-return exceptions.
+#
+# A path declared `eol=crlf` here is exempt from the carriage-return check, and
+# the check reads that declaration from git rather than holding its own list,
+# so the two cannot drift apart. Every such line carries the reason it exists
+# on the line above it.
+#
+# There are none today. The command that shows it:
+#
+#     git ls-files | git check-attr --stdin eol | grep ': eol: crlf$'
