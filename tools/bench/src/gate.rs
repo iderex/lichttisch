@@ -19,18 +19,29 @@
 //! passes is what is judged, so a slow pass costs a case its verdict and never
 //! its colour.
 //!
-//! Two passes back to back measure how quiet one machine was over one minute.
-//! They say nothing about the difference between two machines, and on the fleet
-//! this gate runs on that difference turned out to be the larger one by two
-//! orders of magnitude. So the machine is a condition rather than an assumption:
-//! a baseline is chosen by the processor it was recorded on, and a run on a
-//! processor no baseline covers is reported as judging nothing rather than
-//! judged against somebody else's machine. `CONDITIONS_THAT_MUST_MATCH` carries
-//! the measurement that forced it.
+//! Two passes back to back measure how quiet one machine was over one minute,
+//! and that turned out to be the small half of the problem. What was measured on
+//! the fleet this would run on is in `docs/benchmarks.md`: within one job the
+//! two passes never moved more than 0.1 percent, and one placeholder case moved
+//! 28.7 percent between two commits that touched nothing it measures, on one of
+//! the two processors the fleet hands out and not on the other.
 //!
-//! What that costs is stated here rather than left to be found. A green verdict
-//! from this gate means either that every case held or that no baseline applied,
-//! and only the run's own output distinguishes them.
+//! So nothing in this tree calls this module yet, and that is the honest state
+//! rather than an omission. A stored baseline and a margin cannot separate a
+//! regression from that movement: a margin above it refuses nothing worth
+//! catching, and one below it reddens on changes that touched nothing. Issue
+//! #107 carries the finding and stays open. What is here is the judgement a
+//! gate needs once there are cases whose cost is the work rather than the
+//! layout of the binary around it, and it is reachable from a command line in
+//! the meantime, the same as `--compare`.
+//!
+//! The machine stays a condition regardless, because a baseline from another
+//! processor is not comparable whatever else is true. It is necessary and the
+//! measurement above says it is not sufficient.
+//!
+//! One more cost, stated here rather than left to be found. A green verdict
+//! from this module means either that every case held or that no baseline
+//! applied, and only the run's own output distinguishes them.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -45,12 +56,13 @@ use crate::stats::Outcome;
 /// seven below are the ones that change a duration: the machine, the build, and
 /// what the harness was asked to measure.
 ///
-/// `cpu_model` is on this list because of a measurement rather than because it
-/// looked sensible. On `ubuntu-latest` two runs of one tree came back 13.9 and
-/// 17.4 percent apart, and two runs on one processor came back 0.03 percent
-/// apart. Without this entry the margin would have to sit above the first
-/// figure, and a gate that only refuses a doubling is a gate that catches
-/// nothing anybody would ship.
+/// `cpu_model` is on this list because two runs of one tree on the two
+/// processors `ubuntu-latest` hands out came back 13.9 and 17.4 percent apart,
+/// which is measured in `docs/benchmarks.md`. It is necessary and it is not
+/// sufficient: the same document records one case moving 28.7 percent between
+/// two commits on one of those processors, so a matching processor is not a
+/// promise that two numbers are comparable. This list is what a comparison must
+/// clear before it is worth making, not what makes one sound.
 pub const CONDITIONS_THAT_MUST_MATCH: [&str; 7] = [
     "arch",
     "cpu_model",
@@ -157,7 +169,9 @@ pub enum Chosen<'a> {
 /// A directory of baselines is how one gate covers a fleet that hands out more
 /// than one machine. The alternative was one file and a margin above the
 /// difference between two processors, which measured 17.4 percent, and a gate
-/// that only refuses a doubling refuses nothing worth catching.
+/// that only refuses a doubling refuses nothing worth catching. That is the
+/// reason for the shape and not a claim that the shape is enough; what it is
+/// not enough for is at the top of this file.
 #[must_use]
 pub fn choose<'a>(recorded: &'a [(String, Run)], run: &Run) -> Chosen<'a> {
     let matching: Vec<&str> = recorded
@@ -532,8 +546,7 @@ mod tests {
     fn the_baseline_recorded_on_this_processor_is_the_one_that_judges() {
         // The measurement this exists for: two runs of one tree on the runner
         // fleet came back 13.9 and 17.4 percent apart because the fleet handed
-        // out two processors, while two runs on one processor came back 0.03
-        // percent apart. Judging against the wrong one is judging against
+        // out two processors. Judging against the wrong one is judging against
         // another machine.
         let baselines = [recorded("first.txt", "one"), recorded("second.txt", "two")];
         let mut here = run(&[("sort", measured(1_000))]);

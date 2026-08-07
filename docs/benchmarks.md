@@ -106,3 +106,86 @@ bytes and the whole set is still reproducible from the seed in the output.
 
 No display, no elevated rights and no camera. The only case that wants hardware
 is the one that reports itself skipped without it.
+
+## What this fleet does to a number
+
+Issue: #107
+
+`.github/workflows/bench.yml` runs the harness twice in one job on every pull
+request and prints both. It refuses nothing, and this section is why: #107 asked
+for a stored baseline and a margin, and what was measured says no margin
+separates a regression from what this fleet does on its own.
+
+Two questions, and they came back with opposite answers.
+
+**Inside one job the harness is quiet.** Two runs of one tree, one after the
+other on one runner, over seven jobs. The widest gap between the two was 0.1
+percent and most were 0.0. The comparison is printed by the job itself:
+
+<!-- docs-lint: illustrative, one job's output rather than a command a reader runs -->
+
+    placeholder-digest-a-megabyte             182.657 us -> 182.657 us   0.0 percent
+    placeholder-sort-a-hundred-thousand-keys  1.690 ms -> 1.693 ms  +0.1 percent
+
+**Across jobs it is not.** `ubuntu-latest` is a label, and behind it this fleet
+handed out two processors. Four jobs on one commit, read from the run's own
+logs:
+
+    gh run view 31226232005 --attempt 1 --log | grep -E 'model name|median_ns'
+
+That attempt and attempt 4 landed on an AMD EPYC 7763 and attempts 2 and 3 on an
+AMD EPYC 9V74. `placeholder-digest-a-megabyte` came back at 161643 and 161641
+nanoseconds on the first processor and 141932 twice on the second, which is 13.9
+percent between them, and `placeholder-sort-a-hundred-thousand-keys` was 17.4
+percent apart:
+
+    python -c "print(round((161643 - 141932) * 100 / 141932, 1))"
+    13.9
+    python -c "print(round((1532290 - 1304747) * 100 / 1304747, 1))"
+    17.4
+
+**And the processor is not the whole of it.** Three more jobs, on the next
+commit on the same branch, which changed the harness's argument handling and
+nothing either case measures:
+
+    gh run view 31226990032 --attempt 3 --log | grep -E 'model name|median_ns'
+
+On the AMD EPYC 7763 the digest case came back at 161643 nanoseconds again,
+identical to the commit before. On the AMD EPYC 9V74 it came back at 182650 and
+182657, against 141932 on the commit before:
+
+    python -c "print(round((182650 - 141932) * 100 / 141932, 1))"
+    28.7
+
+Reproducible on both sides: two jobs at the old number, two at the new one, none
+in between. So one processor was unmoved by the change and the other moved 28.7
+percent on work the change did not touch.
+
+Why is not measured here. Code layout is the ordinary explanation for a tight
+loop moving that far on one microarchitecture and not another, and this document
+does not assert it, because nothing here took the measurement that would show
+it. What is measured is the movement.
+
+### What that leaves
+
+A stored baseline and a margin cannot do the job #107 describes on this fleet
+with these cases. A margin above 28.7 percent refuses nothing anybody would
+ship. A margin below it reddens on a change that touched nothing, which is the
+check people learn to wave through.
+
+Two things follow, and neither is decided here.
+
+The cases are the problem before the fleet is. Both are placeholders that
+measure nothing this project does, and both are tight arithmetic loops, which is
+the shape most exposed to what was measured above. A case whose cost is decoding
+a file or answering a query spends its time somewhere the layout of the binary
+does not reach.
+
+Whatever the cases are, comparing a stored number against a run on another
+allocation has to clear that movement first. Comparing a change against its own
+base, built and measured in the same job, is the shape that does not, and it is
+not what #107 asks for. That issue holds the re-plan.
+
+Until then the numbers are printed and nothing refuses them. `tools/bench/src/gate.rs`
+is the judgement a gate would use, with its near-misses, reachable from a command
+line and called by no workflow, and its own first paragraph says so.

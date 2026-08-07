@@ -1,17 +1,19 @@
-# The performance gate (#107).
+# What the benchmark harness does on this runner fleet (#107).
 #
-# The performance bar is a set of numbers in docs/decisions/0009-performance-bar.md
-# and a number in a document is a claim. This is where one of them refuses.
+# Not a gate. It refuses nothing, and the name of the job is what it does rather
+# than what #107 asked for, because a job called a performance gate that passes
+# whatever the numbers say is worse than no job at all.
 #
-# Not one of them yet. Every target in that record is about code this tree does
-# not contain, and what this gate judges today is the harness's own placeholder
-# cases. That is stated in docs/quality-parity.md rather than left for somebody
-# to read a green tick as a statement about the bar.
+# #107 asked for a stored baseline and a margin. What this job measured is why
+# there is no such baseline in the tree: docs/benchmarks.md has the numbers, and
+# the short form is that the same case moved 28.7 percent between two commits
+# that touched nothing it measures, on one of the two processors this fleet
+# hands out and not on the other. No margin separates that from a regression.
 #
-# The margin is stated here rather than in the harness, because this file is the
-# authority for what this gate runs, the same as every other gate in this tree.
-# The harness refuses `--gate` with no `--margin` for that reason: a default
-# would put the number in two places the day somebody passed one.
+# So this runs and prints, on every pull request, for two reasons. It keeps the
+# numbers in front of whoever changes the harness rather than in a document
+# dated August. And it is the evidence #107 needs before it can be planned
+# again, gathered by the route it will eventually be judged on.
 #
 # No job `name:`, deliberately, for the reason build.yml gives.
 name: bench
@@ -48,9 +50,10 @@ jobs:
       - name: State the conditions this run is under
         # A duration is a fact about a machine. The harness prints the
         # conditions it can read from inside its own process; this prints the
-        # ones it cannot, so a baseline recorded here can be read against the
-        # machine that produced it rather than against `ubuntu-latest`, which is
-        # a label whose contents move.
+        # ones it cannot, and the processor line is the one that mattered:
+        # `ubuntu-latest` is a label, and behind it this fleet handed out two
+        # different processors whose numbers differ by more than any margin
+        # worth setting.
         run: |
           set -euo pipefail
           printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
@@ -63,19 +66,16 @@ jobs:
 
       - name: Build the harness at the profile a baseline is recorded at
         # Release, and stated. The harness reads the profile out of the build
-        # rather than out of an argument, and the gate refuses a baseline
-        # recorded under a different one, so a debug run here cannot be judged
-        # against a release baseline.
+        # rather than out of an argument, so a debug run cannot be filed as a
+        # release one by whoever typed the command.
         run: cargo build --locked --release -p bench
 
-      - name: Measure how far two runs of one tree move on this runner
-        # This is the number the margin is set above. Two runs of the same code
-        # on the same runner, compared against each other: whatever moves
-        # between them is the machine, because nothing else differed.
-        #
-        # It runs on every pull request rather than once in August, so a runner
-        # that gets noisier than the margin allows shows up here rather than as
-        # a red gate nobody can reproduce.
+      - name: Measure how far two runs of one tree move inside one job
+        # Two runs of the same code on the same runner, compared against each
+        # other: whatever moves between them is the machine, because nothing
+        # else differed. Over the seven jobs recorded in docs/benchmarks.md this
+        # never exceeded 0.1 percent, which is the half of the problem that
+        # turned out to be easy.
         run: |
           set -euo pipefail
           ./target/release/bench --samples 200 --write target/bench/first.txt
@@ -84,7 +84,8 @@ jobs:
             --compare target/bench/first.txt
 
       - name: Print a result file in the shape a baseline is recorded in
-        # Updating the baseline is a deliberate change in the tree, never
-        # something a run does for you, so what a run owes is the bytes to put
-        # there rather than a commit.
+        # The other half. This is what a later run compares against, and it is
+        # printed rather than committed by a step: recording a baseline is a
+        # deliberate change in the tree with a reason in its message, never
+        # something a run does on somebody's behalf.
         run: cat target/bench/first.txt
