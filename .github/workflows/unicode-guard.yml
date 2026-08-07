@@ -1,10 +1,17 @@
 name: unicode-guard
 
 on:
-  # Every branch and every PR: the guard is a cheap read-only scan and must cover
-  # any future release branch too, not just main (one code line since #954).
+  # Every pull request, and the default branch after a merge. Not every branch
+  # push: a branch pushed here and then opened as a pull request fires both
+  # triggers, so this gate's name reports twice on one head. What that changes
+  # and what it gives up is in docs/required-checks.md (#18).
+  #
+  # This block used to take every branch push, so that a future release branch
+  # was covered as well as main. A pull request against such a branch still runs
+  # this guard, because the trigger below takes every base branch. A push
+  # straight into one does not, and that is the case this trade gives up.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: ["**"]
 
