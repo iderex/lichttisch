@@ -76,8 +76,10 @@ Run on this repository's own tree, the whole set is:
 The graph it judges today is almost empty. Every entry in the lock file is a
 member of this workspace and there is no third-party code in the tree at all:
 
+<!-- docs-lint: rerun, the first count moves whenever a workspace member lands and it has already gone stale here once -->
+
     grep -c '^\[\[package\]\]' Cargo.lock
-    9
+    11
     grep -c 'source = ' Cargo.lock
     0
 

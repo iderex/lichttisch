@@ -110,10 +110,19 @@ multiple-versions = "deny"
 # tree can say today is that there is no wildcard on a registry crate to find,
 # because there is no registry crate at all:
 #
+#     <!-- docs-lint: rerun, the first count moves whenever a workspace member lands and it has already gone stale here once -->
 #     grep -c '^\[\[package\]\]' Cargo.lock
-#     9
+#     11
 #     grep -c 'source = ' Cargo.lock
 #     0
+#
+# The marker on the block above is not decoration and is not Markdown left over
+# from somewhere else. `tools/docs-lint` scans every tracked file for it, takes
+# the comment prefix off each line from the marker line itself, and fails the
+# documentation gate when either number stops being what the command returns.
+# That is why the pair is worth pasting here at all: without it, a count in a
+# manifest comment is a number nobody re-runs, and both of these had already
+# drifted once.
 wildcards = "warn"
 
 [sources]

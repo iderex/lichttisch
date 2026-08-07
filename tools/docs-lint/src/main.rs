@@ -44,10 +44,24 @@
 //! arguments that cannot work is a command this check calls runnable. What is
 //! refused is the program this tree never says it has, which is the case that
 //! reaches a contributor as an instruction they cannot follow.
+//!
+//! ## The one thing here that does judge an output
+//!
+//! `rerun.rs` re-runs the commands a document declares re-runnable and refuses
+//! an output that no longer matches (#148). It is deliberately narrow: a block
+//! carries the marker or it is not read, and the command has to be one this
+//! tree can answer from the tracked files alone. Everything the paragraphs
+//! above say about what is not judged still holds for every block without that
+//! marker, which is nearly all of them.
+//!
+//! That leg reads every tracked file rather than the `.md` ones, because one of
+//! the two drifts that forced it is in `deny.toml`. The other rules stay on
+//! Markdown, where their shape assumptions hold.
 
 mod lint;
+mod rerun;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -105,6 +119,97 @@ fn read(path: &Path) -> Result<String, String> {
 /// the tree reports that rather than reporting a clean tree.
 fn stop(why: &str) -> ExitCode {
     println!("::error::docs-lint could not judge this tree: {why}");
+    ExitCode::FAILURE
+}
+
+/// What the re-run leg did, so the summary can say what it covered.
+#[derive(Default)]
+struct Rerun {
+    blocks: usize,
+    commands: usize,
+    scanned: usize,
+    skipped: usize,
+    findings: Vec<lint::Finding>,
+}
+
+/// Re-run every declared block in the tracked tree.
+///
+/// Every tracked file is scanned rather than the Markdown ones, because a
+/// pasted output in a manifest drifts the same way one in a document does and
+/// no Markdown route reaches it. A file whose bytes are not text carries no
+/// marker, so it is skipped and counted rather than being an error; a file that
+/// cannot be read at all stops the run, because a scan that silently covered
+/// less than the tree is the thing this whole check exists against.
+fn rerun_findings(tracked: &HashSet<String>, roster: &HashSet<&str>) -> Result<Rerun, String> {
+    let mut done = Rerun::default();
+    let mut paths: Vec<&String> = tracked.iter().collect();
+    paths.sort();
+    let mut contents: BTreeMap<String, String> = BTreeMap::new();
+    for path in paths {
+        let bytes = std::fs::read(Path::new(path))
+            .map_err(|why| format!("could not read the tracked path {path}: {why}"))?;
+        let Ok(text) = String::from_utf8(bytes) else {
+            done.skipped += 1;
+            continue;
+        };
+        done.scanned += 1;
+        contents.insert(path.clone(), text);
+    }
+    for (path, text) in &contents {
+        let read = rerun::read(path, text, roster);
+        done.blocks += read.blocks;
+        done.findings.extend(read.findings);
+        for one in &read.pasted {
+            done.commands += 1;
+            let Some(against) = contents.get(&one.reads) else {
+                done.findings.push(lint::Finding {
+                    path: path.clone(),
+                    line: one.line,
+                    rule: rerun::RERUN,
+                    what: format!(
+                        "`{}` is not a tracked path read as text, so this command cannot be \
+                         re-run from a clone.",
+                        one.reads
+                    ),
+                    quoted: one.command.clone(),
+                });
+                continue;
+            };
+            done.findings.extend(rerun::compare(path, one, against));
+        }
+    }
+    Ok(done)
+}
+
+/// Print the verdict and return it.
+///
+/// The clean message names what was judged and what was not, because the one
+/// leg that reads an output reads only the declared blocks, and a sentence that
+/// left that out would let a green run be read as every pasted number in the
+/// tree having been checked.
+fn report(findings: &[lint::Finding], declarations_path: &str) -> ExitCode {
+    if findings.is_empty() {
+        println!(
+            "Every reference resolves, every command names a declared program, every decision \
+             record carries its fields, and the shape rules hold. The pasted outputs that are \
+             declared re-runnable are the ones the commands above them still return. No other \
+             pasted output is judged, and none is trusted either."
+        );
+        return ExitCode::SUCCESS;
+    }
+
+    for finding in findings {
+        println!(
+            "FAIL    {}:{} [{}] {}",
+            finding.path, finding.line, finding.rule, finding.what
+        );
+        println!("read    {}", finding.quoted);
+    }
+    println!(
+        "::error::{} thing(s) in the documentation do not hold. Each line above names the file, \
+         the line and the rule. The declarations are in {declarations_path}.",
+        findings.len()
+    );
     ExitCode::FAILURE
 }
 
@@ -180,6 +285,17 @@ fn main() -> ExitCode {
         &references_used,
     ));
 
+    let roster: HashSet<&str> = declared
+        .programs
+        .iter()
+        .map(|one| one.value.as_str())
+        .collect();
+    let rerun = match rerun_findings(&tracked, &roster) {
+        Ok(rerun) => rerun,
+        Err(why) => return stop(&why),
+    };
+    findings.extend(rerun.findings);
+
     println!(
         "examined={} document(s) tracked={} path(s) programs={} declared / {} used references={} declared / {} used",
         documents.len(),
@@ -189,29 +305,12 @@ fn main() -> ExitCode {
         declared.references.len(),
         references_used.len()
     );
-
-    if findings.is_empty() {
-        println!(
-            "Every reference resolves, every command names a declared program, every decision \
-             record carries its fields, and the shape rules hold. Whether any of it is true is \
-             not judged here."
-        );
-        return ExitCode::SUCCESS;
-    }
-
-    for finding in &findings {
-        println!(
-            "FAIL    {}:{} [{}] {}",
-            finding.path, finding.line, finding.rule, finding.what
-        );
-        println!("read    {}", finding.quoted);
-    }
     println!(
-        "::error::{} thing(s) in the documentation do not hold. Each line above names the file, \
-         the line and the rule. The declarations are in {declarations_path}.",
-        findings.len()
+        "re-ran={} command(s) in {} declared block(s) across {} tracked file(s) read as text, {} not read as text",
+        rerun.commands, rerun.blocks, rerun.scanned, rerun.skipped
     );
-    ExitCode::FAILURE
+
+    report(&findings, &declarations_path)
 }
 
 #[cfg(test)]
