@@ -1,0 +1,104 @@
+# The pull-request hygiene gate (#137).
+#
+# The gate this project is held to requires a check for the hygiene of a pull
+# request itself. This tree had no counterpart, and `CONTRIBUTING.md` says why
+# in its own words: nothing here reads a commit message, an issue body or a
+# pull request body, so a body naming no issue merged exactly like one naming
+# the right issue.
+#
+# This job fetches and nothing else. Every judgement is in `tools/pr-hygiene`,
+# which is a program in the workspace with a near-miss beside every rule it
+# holds. A pattern buried in a `run:` block cannot carry one, and enforcement
+# logic in a shell block inside a workflow is how a gate ends up refusing valid
+# work with nobody able to prove it.
+#
+# WHAT THIS CHECK CANNOT JUDGE is stated at the top of
+# `tools/pr-hygiene/src/main.rs` rather than restated here, and it is the part
+# worth reading before treating a green tick as a review. In short: that the
+# sentence exists, not that it is true.
+#
+# Two properties of the fetch matter to the verdict and are done here because
+# only here can they be done.
+#
+#   1. The body arrives through the environment rather than through a `${{ }}`
+#      expansion inside the script. A pull request body is text a stranger
+#      wrote, and an expansion pastes it into the shell before the shell parses
+#      it. This is the template-injection shape the workflow audit refuses.
+#   2. The issue index is fetched with an explicit row cap and the cap is
+#      handed to the tool. An index that came back exactly full may have been
+#      cut off, and a reference beyond the cut would read as an issue that does
+#      not exist, which is a red check for a reason that is not true. The tool
+#      stops rather than judging on it.
+#
+# The job runs on `pull_request` only. There is no body to read on a push, and
+# a check that reports nothing on a push is the honest shape rather than one
+# that passes with nothing examined.
+name: pr-hygiene
+
+on:
+  pull_request:
+    branches: ["**"]
+
+# Read-only. The job reads the issue list and the pull request that triggered
+# it, and writes nothing anywhere.
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-hygiene:
+    name: Pull request hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: Fetch the body and the issue index
+        env:
+          # The body is text somebody else wrote. It reaches the script as a
+          # value rather than as source.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP:-/tmp}"
+          printf '%s' "$PR_BODY" > "${work}/body.md"
+          # One call, every issue, open and closed. `--state all` is what makes
+          # "does not exist" and "is closed" different answers instead of one.
+          gh issue list --state all --limit 1000 \
+            --json number,state --jq '.[] | "\(.number) \(.state)"' \
+            > "${work}/index.txt"
+          printf 'body=%s bytes index=%s rows\n' \
+            "$(wc -c < "${work}/body.md")" "$(wc -l < "${work}/index.txt")"
+
+      - name: Judge the body against the template
+        env:
+          # The author type decides only whether the body is judged at all, and
+          # the hole that opens is named in the tool's own file.
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP:-/tmp}"
+          # Built as positional parameters so every one stays quoted. An
+          # unquoted variable holding "maybe a flag, maybe nothing" is the
+          # word-splitting shape that once turned a scope gate into a refusal
+          # of valid work.
+          set -- \
+            --template .github/pull_request_template.md \
+            --body "${work}/body.md" \
+            --index "${work}/index.txt" \
+            --index-cap 1000
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            set -- "$@" --author-is-bot
+          fi
+          cargo run --locked --quiet -p pr-hygiene -- "$@"

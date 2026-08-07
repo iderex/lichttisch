@@ -167,6 +167,13 @@ blob, in a tree whose tests exist to assert on exact bytes.
 `bidi`. Prevents a merge of source that renders to a reviewer differently from
 how it runs.
 
+`Pull request hygiene`, from `.github/workflows/pr-hygiene.yml`, job
+`pr-hygiene`. Prevents a merge whose body names no issue, names an issue this
+repository does not have, names an issue already closed, or drops a section
+`.github/pull_request_template.md` declares. It judges that the sentences exist
+and not what they say, which `tools/pr-hygiene/src/main.rs` states in its own
+words, and it does not judge a body written by a bot at all.
+
 `Audit workflows (zizmor)`, from `.github/workflows/zizmor.yml`, job `zizmor`.
 Prevents a merge of a workflow change reintroducing template injection, an
 unpinned action, or a token wider than the job it is granted to. The name is the
