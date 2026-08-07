@@ -1,0 +1,90 @@
+# The performance gate (#107).
+#
+# The performance bar is a set of numbers in docs/decisions/0009-performance-bar.md
+# and a number in a document is a claim. This is where one of them refuses.
+#
+# Not one of them yet. Every target in that record is about code this tree does
+# not contain, and what this gate judges today is the harness's own placeholder
+# cases. That is stated in docs/quality-parity.md rather than left for somebody
+# to read a green tick as a statement about the bar.
+#
+# The margin is stated here rather than in the harness, because this file is the
+# authority for what this gate runs, the same as every other gate in this tree.
+# The harness refuses `--gate` with no `--margin` for that reason: a default
+# would put the number in two places the day somebody passed one.
+#
+# No job `name:`, deliberately, for the reason build.yml gives.
+name: bench
+
+on:
+  # Every pull request, and the default branch after a merge. Not every branch
+  # push, for the reason docs/required-checks.md gives.
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref. The job writes nothing outside its
+# own runner, so a cancelled run leaves nothing half done.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State the conditions this run is under
+        # A duration is a fact about a machine. The harness prints the
+        # conditions it can read from inside its own process; this prints the
+        # ones it cannot, so a baseline recorded here can be read against the
+        # machine that produced it rather than against `ubuntu-latest`, which is
+        # a label whose contents move.
+        run: |
+          set -euo pipefail
+          printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
+          printf 'runner=%s image=%s\n' "${RUNNER_NAME:-unset}" "${ImageOS:-unset}"
+          printf 'nproc=%s\n' "$(nproc)"
+          grep -m1 'model name' /proc/cpuinfo || true
+          grep -m1 MemTotal /proc/meminfo || true
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Build the harness at the profile a baseline is recorded at
+        # Release, and stated. The harness reads the profile out of the build
+        # rather than out of an argument, and the gate refuses a baseline
+        # recorded under a different one, so a debug run here cannot be judged
+        # against a release baseline.
+        run: cargo build --locked --release -p bench
+
+      - name: Measure how far two runs of one tree move on this runner
+        # This is the number the margin is set above. Two runs of the same code
+        # on the same runner, compared against each other: whatever moves
+        # between them is the machine, because nothing else differed.
+        #
+        # It runs on every pull request rather than once in August, so a runner
+        # that gets noisier than the margin allows shows up here rather than as
+        # a red gate nobody can reproduce.
+        run: |
+          set -euo pipefail
+          ./target/release/bench --samples 200 --write target/bench/first.txt
+          echo
+          ./target/release/bench --samples 200 --write target/bench/second.txt \
+            --compare target/bench/first.txt
+
+      - name: Print a result file in the shape a baseline is recorded in
+        # Updating the baseline is a deliberate change in the tree, never
+        # something a run does for you, so what a run owes is the bytes to put
+        # there rather than a commit.
+        run: cat target/bench/first.txt

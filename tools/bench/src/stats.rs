@@ -15,6 +15,14 @@ pub enum Outcome {
     Skipped(String),
 }
 
+impl Outcome {
+    /// Whether this case produced no duration at all.
+    #[must_use]
+    pub const fn is_skipped(&self) -> bool {
+        matches!(self, Self::Skipped(_))
+    }
+}
+
 /// The numbers taken out of one case's samples.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Summary {
