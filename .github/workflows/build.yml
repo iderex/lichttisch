@@ -19,10 +19,14 @@
 name: build
 
 on:
+  # Every pull request, and the default branch after a merge. Not every branch
+  # push: a branch pushed here and then opened as a pull request fires both
+  # triggers, so this gate's name reports twice on one head. What that changes
+  # and what it gives up is in docs/required-checks.md (#18).
   pull_request:
     branches: ["**"]
   push:
-    branches: ["**"]
+    branches: [main]
 
 # Read-only: nothing here writes to the repository.
 permissions:

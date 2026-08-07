@@ -19,7 +19,9 @@ members = [
     "crates/session",
     "crates/surface",
     "tools/bench",
+    "tools/corpus",
     "tools/docs-lint",
+    "tools/pr-hygiene",
 ]
 
 # Shared by every member so a version, an edition or a licence is stated once.

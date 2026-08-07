@@ -76,14 +76,57 @@ Dependabot pull requests, so requiring `zizmor` would require an artefact the
 workflow is written to survive the loss of, while leaving the audit that
 actually fails the build unrequired.
 
-Several names appear twice on the pull-request head, from two runs of one
-workflow. Those workflows trigger on both `push` to every branch and
+Several names appeared twice on the pull-request head, from two runs of one
+workflow. Those workflows triggered on both `push` to every branch and
 `pull_request` to every branch, and a branch pushed to this repository and then
-opened as a pull request fires both. Requiring such a name requires every run
-reporting it, which is the safe direction rather than the dangerous one. The
-duplication itself is work for #18, where the gate set is brought under stable
-names, and it is named here so that the choice below is not mistaken for an
-oversight.
+opened as a pull request fires both. #18 closed that, and the next section is
+what it settled.
+
+## When each gate runs, and why it is not every push
+
+Every gate here takes two triggers and no others. A pull request against any
+base branch, which is the event a merge condition is evaluated on, and a push to
+`main`, which is what leaves a verdict on the default branch head after a merge.
+
+    git ls-files .github/workflows | while read -r f; do printf '%s\t' "$f"; sed -n '/^on:/,/^permissions:/p' "$f" | grep -E '^  (push|pull_request|schedule|branch_protection_rule):|^    branches:' | tr '\n' ' '; echo; done
+
+A push to any other branch runs nothing. That is deliberate and it is a trade
+rather than a tidy-up.
+
+What it buys is one run per gate per head. A branch pushed here and then opened
+as a pull request used to fire both triggers, so one head carried two check runs
+under one name. A protection rule matching that name then waits on both, and a
+reader counting green ticks is reading one gate twice.
+
+What it gives up is feedback on a branch with no pull request open against it.
+The only route into `main` is a pull request, because the ruleset quoted at the
+top of this document refuses a direct push and has no bypass actors, so nothing
+reaches the default branch without every gate having run on it. A branch nobody
+has opened a pull request for is not on that route, and the cost is that its
+author learns about a red gate when they open one rather than when they push.
+
+The narrower case is a branch that is not `main` and is not protected. A pull
+request against it runs every gate, because the `pull_request` trigger takes
+every base branch. A push straight into it runs none. `unicode-guard.yml`
+carried the opposite choice for exactly that reason and its own comment now
+records what changed.
+
+`Scorecard analysis` keeps its own shape, in its own file, for the reason that
+file gives. `DCO sign-off` and `dependency-review` take `pull_request` alone,
+because neither has anything to say about a push: one reads a base to head
+commit range and the other reads the dependency change a pull request proposes.
+
+Every workflow here also cancels its own superseded run:
+
+    git ls-files .github/workflows | xargs grep -c 'cancel-in-progress: true'
+
+A run cancelled halfway leaves nothing half done in any of them. Eight write
+only inside their own runner. The two that write anywhere else upload a SARIF
+file to code scanning as their last step, and losing that upload leaves the
+previous analysis standing rather than a partial one, which is why neither is
+the exception the condition allows for. If a gate ever gains a step that
+publishes something a reader would act on, that gate is where the exception
+belongs and this paragraph is what it argues against.
 
 ## The proposed merge conditions
 
@@ -101,6 +144,13 @@ breaks the suite or drops line coverage below the declared floor.
 `format-and-lint`. Prevents a merge whose shape is somebody's editor rather than
 `rustfmt.toml`, and a merge tripping a lint the workspace manifest declares as
 an error.
+
+`static-analysis`, from `.github/workflows/static-analysis.yml`, job
+`static-analysis`, added by #16. Prevents a merge pulling in a dependency the
+advisory database has an entry against, one nobody maintains any more, one whose
+licence is not on the allow list in `deny.toml`, or one arriving from a source
+that file does not name. `docs/static-analysis.md` says what it is proven to
+refuse and how small the graph it judges is today.
 
 `DCO sign-off`, from `.github/workflows/dco.yml`, job `dco`. Prevents a merge
 carrying a commit whose author has not asserted the certificate in `DCO.md`.
@@ -124,6 +174,13 @@ condition that would reverse it. It judges the shape of what a document says
 and never whether it is true, which is at the top of
 `tools/docs-lint/src/main.rs` and is the part worth reading before treating a
 green tick here as a review.
+
+`Pull request hygiene`, from `.github/workflows/pr-hygiene.yml`, job
+`pr-hygiene`. Prevents a merge whose body names no issue, names an issue this
+repository does not have, names an issue already closed, or drops a section
+`.github/pull_request_template.md` declares. It judges that the sentences exist
+and not what they say, which `tools/pr-hygiene/src/main.rs` states in its own
+words, and it does not judge a body written by a bot at all.
 
 `Audit workflows (zizmor)`, from `.github/workflows/zizmor.yml`, job `zizmor`.
 Prevents a merge of a workflow change reintroducing template injection, an

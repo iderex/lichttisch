@@ -11,6 +11,10 @@ name = "catalogue"
 version = "0.0.0"
 
 [[package]]
+name = "corpus"
+version = "0.0.0"
+
+[[package]]
 name = "culling"
 version = "0.0.0"
 dependencies = [
@@ -43,6 +47,10 @@ dependencies = [
  "session",
  "surface",
 ]
+
+[[package]]
+name = "pr-hygiene"
+version = "0.0.0"
 
 [[package]]
 name = "session"
