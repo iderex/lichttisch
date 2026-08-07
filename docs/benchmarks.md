@@ -41,6 +41,8 @@ in every file it writes.
 
 ## A skipped case is reported, never omitted
 
+<!-- docs-lint: illustrative, the report the harness writes rather than a command -->
+
     case                                      samples          median             p95
     capture-a-tethered-frame                        -  skipped: no camera device present
     placeholder-digest-a-megabyte                  15      122.200 us      132.600 us

@@ -107,9 +107,9 @@ author learns about a red gate when they open one rather than when they push.
 
 The narrower case is a branch that is not `main` and is not protected. A pull
 request against it runs every gate, because the `pull_request` trigger takes
-every base branch. A push straight into it runs none. `unicode-guard.yml`
-carried the opposite choice for exactly that reason and its own comment now
-records what changed.
+every base branch. A push straight into it runs none.
+`.github/workflows/unicode-guard.yml` carried the opposite choice for exactly
+that reason and its own comment now records what changed.
 
 `Scorecard analysis` keeps its own shape, in its own file, for the reason that
 file gives. `DCO sign-off` and `dependency-review` take `pull_request` alone,
@@ -166,6 +166,14 @@ blob, in a tree whose tests exist to assert on exact bytes.
 `Reject Trojan Source Unicode`, from `.github/workflows/unicode-guard.yml`, job
 `bidi`. Prevents a merge of source that renders to a reviewer differently from
 how it runs.
+
+`Documentation lint`, from `.github/workflows/docs-lint.yml`, job `docs-lint`.
+Prevents a merge of documentation naming a path this tree does not have, a
+command whose program this tree never says it has, or a decision record with no
+condition that would reverse it. It judges the shape of what a document says
+and never whether it is true, which is at the top of
+`tools/docs-lint/src/main.rs` and is the part worth reading before treating a
+green tick here as a review.
 
 `Pull request hygiene`, from `.github/workflows/pr-hygiene.yml`, job
 `pr-hygiene`. Prevents a merge whose body names no issue, names an issue this

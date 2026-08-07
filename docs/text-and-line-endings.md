@@ -91,6 +91,8 @@ above it.
 
 Proven in both directions on the second tree above. With the declaration added:
 
+<!-- docs-lint: illustrative, what the guard printed rather than a command -->
+
     exempt  legacy.md (.gitattributes declares eol=crlf)
     tracked=2 binary=0 exempt=1 examined=1
     No carriage return in any examined text blob.
@@ -165,6 +167,8 @@ matter.
 `str::lines` splits on the line feed alone. A lone carriage return is therefore
 not a line break to that parser, while an editor honouring it draws one. So
 
+<!-- docs-lint: illustrative, a line of the boundary declaration under discussion -->
+
     catalogue ->
 
 followed by a carriage return and then `foreign` is two lines on the screen,
@@ -184,11 +188,15 @@ read.
 
 Measured by deleting the guard and leaving everything else alone:
 
+<!-- docs-lint: illustrative, the message the test printed when the guard was gone -->
+
     a lone carriage return was read as ordinary text, so a line the file
     appears to withhold was granted: Ok({"catalogue": {"foreign"}})
 
 and by swapping the fixture's own constant for its neighbour's, which is the
 mistake that would make the pair prove nothing:
+
+<!-- docs-lint: illustrative, the message the test printed against the wrong fixture -->
 
     the fixture is meant to carry one carriage return that is not part of a
     pair, and it carries "catalogue -> foreign\n"
