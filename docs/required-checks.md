@@ -170,10 +170,15 @@ how it runs.
 `Documentation lint`, from `.github/workflows/docs-lint.yml`, job `docs-lint`.
 Prevents a merge of documentation naming a path this tree does not have, a
 command whose program this tree never says it has, or a decision record with no
-condition that would reverse it. It judges the shape of what a document says
-and never whether it is true, which is at the top of
+condition that would reverse it. It also prevents a merge that leaves a pasted
+output stale where the block it sits in was declared re-runnable, which is the
+one thing here that judges an output rather than a shape and reaches beyond the
+Markdown files. Everything else it does judges the shape of what a document
+says and never whether it is true, which is at the top of
 `tools/docs-lint/src/main.rs` and is the part worth reading before treating a
-green tick here as a review.
+green tick here as a review. A block carrying no marker is not re-run and is
+not trusted either: the run prints how many it read, so a green tick is not a
+statement about every number in the tree.
 
 `Pull request hygiene`, from `.github/workflows/pr-hygiene.yml`, job
 `pr-hygiene`. Prevents a merge whose body names no issue, names an issue this

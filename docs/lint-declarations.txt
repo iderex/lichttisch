@@ -15,6 +15,16 @@
 #
 # A comment line and a blank line are ignored. The reason is the rest of the
 # line and it is required.
+#
+# One thing the lint reads is not declared here, and this is the note that says
+# where it is instead. A block whose pasted output the check re-runs is declared
+# by a marker on the line above the block, in the file the block is in, rather
+# than by an entry here: the declaration belongs beside the number it is about,
+# because a list of file and line numbers in this file would drift the moment
+# somebody added a paragraph. What the marker looks like, which commands it can
+# re-run and what it refuses are at the top of tools/docs-lint/src/rerun.rs.
+# The marker is not written out here, for the reason that file gives: the scan
+# reads every tracked file, so a document showing one would be declaring one.
 
 # Programs a document may invoke.
 #
