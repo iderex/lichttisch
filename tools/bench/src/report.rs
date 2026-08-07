@@ -208,7 +208,7 @@ pub fn compare(before: &Run, after: &Run) -> BTreeMap<String, Change> {
 /// Integer arithmetic throughout. A baseline of zero has no percentage against
 /// it and reports no move, which is the honest answer rather than an infinity
 /// dressed up as a number.
-fn relative_change(before_ns: u64, after_ns: u64) -> i64 {
+pub fn relative_change(before_ns: u64, after_ns: u64) -> i64 {
     if before_ns == 0 {
         return 0;
     }

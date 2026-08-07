@@ -1,0 +1,91 @@
+# What the benchmark harness does on this runner fleet (#107).
+#
+# Not a gate. It refuses nothing, and the name of the job is what it does rather
+# than what #107 asked for, because a job called a performance gate that passes
+# whatever the numbers say is worse than no job at all.
+#
+# #107 asked for a stored baseline and a margin. What this job measured is why
+# there is no such baseline in the tree: docs/benchmarks.md has the numbers, and
+# the short form is that the same case moved 28.7 percent between two commits
+# that touched nothing it measures, on one of the two processors this fleet
+# hands out and not on the other. No margin separates that from a regression.
+#
+# So this runs and prints, on every pull request, for two reasons. It keeps the
+# numbers in front of whoever changes the harness rather than in a document
+# dated August. And it is the evidence #107 needs before it can be planned
+# again, gathered by the route it will eventually be judged on.
+#
+# No job `name:`, deliberately, for the reason build.yml gives.
+name: bench
+
+on:
+  # Every pull request, and the default branch after a merge. Not every branch
+  # push, for the reason docs/required-checks.md gives.
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref. The job writes nothing outside its
+# own runner, so a cancelled run leaves nothing half done.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State the conditions this run is under
+        # A duration is a fact about a machine. The harness prints the
+        # conditions it can read from inside its own process; this prints the
+        # ones it cannot, and the processor line is the one that mattered:
+        # `ubuntu-latest` is a label, and behind it this fleet handed out two
+        # different processors whose numbers differ by more than any margin
+        # worth setting.
+        run: |
+          set -euo pipefail
+          printf 'user=%s uid=%s\n' "$(id -un)" "$(id -u)"
+          printf 'runner=%s image=%s\n' "${RUNNER_NAME:-unset}" "${ImageOS:-unset}"
+          printf 'nproc=%s\n' "$(nproc)"
+          grep -m1 'model name' /proc/cpuinfo || true
+          grep -m1 MemTotal /proc/meminfo || true
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Build the harness at the profile a baseline is recorded at
+        # Release, and stated. The harness reads the profile out of the build
+        # rather than out of an argument, so a debug run cannot be filed as a
+        # release one by whoever typed the command.
+        run: cargo build --locked --release -p bench
+
+      - name: Measure how far two runs of one tree move inside one job
+        # Two runs of the same code on the same runner, compared against each
+        # other: whatever moves between them is the machine, because nothing
+        # else differed. Over the seven jobs recorded in docs/benchmarks.md this
+        # never exceeded 0.1 percent, which is the half of the problem that
+        # turned out to be easy.
+        run: |
+          set -euo pipefail
+          ./target/release/bench --samples 200 --write target/bench/first.txt
+          echo
+          ./target/release/bench --samples 200 --write target/bench/second.txt \
+            --compare target/bench/first.txt
+
+      - name: Print a result file in the shape a baseline is recorded in
+        # The other half. This is what a later run compares against, and it is
+        # printed rather than committed by a step: recording a baseline is a
+        # deliberate change in the tree with a reason in its message, never
+        # something a run does on somebody's behalf.
+        run: cat target/bench/first.txt
