@@ -66,3 +66,8 @@ lichttisch -> catalogue culling foreign ingest session surface
 # The benchmark harness. It measures the modules but is not one of them and
 # nothing ships it, so it reaches nothing here.
 bench ->
+
+# The measurement corpus generator. It writes files from a seed and reads none
+# of the modules, so it reaches nothing here. Nothing ships it either: what it
+# produces is measured against, and the corpus itself is never committed.
+corpus ->
