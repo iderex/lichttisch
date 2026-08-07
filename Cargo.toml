@@ -19,6 +19,7 @@ members = [
     "crates/session",
     "crates/surface",
     "tools/bench",
+    "tools/corpus",
 ]
 
 # Shared by every member so a version, an edition or a licence is stated once.
