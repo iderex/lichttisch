@@ -26,6 +26,7 @@
 program cargo the pinned toolchain installs it, and rust-toolchain.toml is what pins it
 program git the tree is a git repository and every route here reads it
 program gh the GitHub CLI, which the workflows already run and which a maintainer uses to read the rulesets a document quotes
+program grep present wherever a shell is, and the static-analysis note counts lock file entries with it in front of the reader
 program printf a shell builtin wherever these documents are followed, and the demonstrations that write exact bytes need one
 program python present on the runner image and on an ordinary developer machine, used in one record to divide two numbers in front of the reader rather than behind them
 program rustc the pinned toolchain installs it alongside cargo
@@ -43,5 +44,7 @@ reference iderex/jellyfin-plugin-sso a repository on GitHub, the gate this proje
 reference iderex/retusche a repository on GitHub, the sibling project the scope boundary is drawn against
 reference KDE/digikam a repository on GitHub, the second application the integration decision weighed
 reference LibRaw/LibRaw a repository on GitHub, the other decoder candidate
+reference card-03/DCIM/104CANON/IMG_0412.CR3 the tree a camera writes, shown so the corpus note says which shape it generates rather than describing it
+reference library/2024/2024-06-12/session-0031/... the tree an import produces, shown for the same reason and deliberately ending in an ellipsis
 reference docs/decisions/NNNN-slug.md the naming rule for a decision record, written as the pattern rather than as one record
 reference tests/fixtures/ declared in .gitattributes before the first fixture lands, deliberately and with the reason on the line above the declaration

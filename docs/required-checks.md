@@ -107,9 +107,9 @@ author learns about a red gate when they open one rather than when they push.
 
 The narrower case is a branch that is not `main` and is not protected. A pull
 request against it runs every gate, because the `pull_request` trigger takes
-every base branch. A push straight into it runs none. `unicode-guard.yml`
-carried the opposite choice for exactly that reason and its own comment now
-records what changed.
+every base branch. A push straight into it runs none.
+`.github/workflows/unicode-guard.yml` carried the opposite choice for exactly
+that reason and its own comment now records what changed.
 
 `Scorecard analysis` keeps its own shape, in its own file, for the reason that
 file gives. `DCO sign-off` and `dependency-review` take `pull_request` alone,
