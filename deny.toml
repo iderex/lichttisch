@@ -1,0 +1,123 @@
+# The static analysis gate's rules (#16).
+#
+# The thresholds live here rather than on a command line in a workflow file, so
+# a local run and the automated check read one table and cannot disagree about
+# what counts as a finding. The workflow says when this runs; this file is the
+# authority for what it refuses.
+
+[graph]
+# Judge the graph a build can actually contain, not the one today's default
+# features happen to produce. A dependency behind an optional feature is a
+# dependency somebody turns on later without touching this file.
+all-features = true
+
+[advisories]
+# The advisory database is consulted on every run. `cargo deny check` fetches
+# before it judges, and `--disable-fetch` is deliberately absent from the
+# workflow, so a run that cannot reach the database fails instead of judging
+# against whatever was already on the machine. The proof of that is a leg in
+# .github/workflows/static-analysis.yml, which runs the same tool against an
+# unreadable database and requires a non-zero exit.
+#
+# There is no severity below which a finding is tolerated, and that is not a
+# setting this tree chose to leave at its strictest. The key that would set it
+# no longer exists:
+#
+#     cargo deny --version
+#     cargo-deny 0.18.6
+#     printf '[advisories]\nseverity-threshold = "none"\n' > /tmp/sev.toml
+#     cargo deny check --config /tmp/sev.toml advisories
+#     error[deprecated]: this key has been removed, see
+#     https://github.com/EmbarkStudios/cargo-deny/pull/611 for migration information
+#
+# So a threshold written here would be a line that configures nothing. The
+# position this tree wants is the strict one anyway: it links image and
+# metadata parsers, and a low-severity advisory in a parser that reads a
+# stranger's file is not the same thing as a low-severity advisory in a build
+# script.
+
+# An unmaintained crate anywhere in the graph rather than only among the
+# direct dependencies. A parser nobody is fixing is the case this matters for,
+# and it usually arrives as somebody else's dependency.
+unmaintained = "all"
+
+# A yanked release is not an advisory and is refused on its own. An author who
+# withdrew a version said something about it that the advisory database does
+# not carry.
+yanked = "deny"
+
+# Silencing an advisory is an edit to this list with the reason on the line
+# above it, read like any other change, rather than a flag somebody passed once
+# on a command line nobody reviews.
+ignore = []
+
+[licenses]
+# An allow list rather than a deny list, so a licence nobody has considered
+# arrives as a red check instead of as a silent addition. This repository is
+# AGPL-3.0-only, which constrains what may be linked, and the constraint is
+# worth nothing if a dependency can carry incompatible terms in unread.
+#
+# Every entry is either a licence this tree carries or one it would accept from
+# a dependency. The list is short on purpose and widening it is an argued
+# change.
+allow = [
+    # This workspace's own crates.
+    "AGPL-3.0-only",
+    # The pair the Rust ecosystem publishes under, both compatible with
+    # distributing the result under AGPL-3.0-only.
+    "Apache-2.0",
+    "MIT",
+]
+
+# The score below which a detected licence text is not trusted to be the thing
+# it resembles. The tool's default is 0.8. A near miss on a licence is the case
+# where being approximately right is worst, so this is set higher.
+confidence-threshold = 0.93
+
+[bans]
+# Two copies of one library in a binary is two copies of its bugs and two
+# copies of its advisories, and a version bump patches one of them. Refused
+# rather than noted.
+multiple-versions = "deny"
+
+# A wildcard version requirement is a dependency on whatever was published most
+# recently, which is the opposite of what rust-toolchain.toml and Cargo.lock do
+# everywhere else in this tree. It is a warning here rather than a refusal, and
+# the reason is written down because a warning that looks like an oversight
+# gets promoted by somebody who does not know why it is not one.
+#
+# Each member of this workspace depends on its siblings by path. A path
+# dependency carries no version requirement, because there is no registry
+# release to require a version of, and the tool reads that absence as a
+# wildcard. Under the setting below those are warnings, so the refusal has to
+# be produced from a copy of this file to be quoted at all:
+#
+#     sed -e 's/^wildcards = "warn"$/wildcards = "deny"/' deny.toml > /tmp/wc.toml
+#     cargo deny check --config /tmp/wc.toml bans
+#     error[wildcard]: found 2 wildcard dependencies for crate 'surface'
+#     bans FAILED
+#
+# The exemption written for exactly that case does not apply, and says why.
+# Adding it to that copy moves nothing:
+#
+#     error[wildcard]: found 2 wildcard dependencies for crate 'surface'.
+#     allow-wildcard-paths is enabled, but does not apply to public crates as
+#     crates.io disallows path dependencies.
+#
+# A crate counts as public until its own manifest says otherwise. Whether these
+# crates are ever published is part of what #120 decides, so the manifests are
+# left to that issue rather than edited here to satisfy a linter. What this
+# tree can say today is that there is no wildcard on a registry crate to find,
+# because there is no registry crate at all:
+#
+#     grep -c '^\[\[package\]\]' Cargo.lock
+#     9
+#     grep -c 'source = ' Cargo.lock
+#     0
+wildcards = "warn"
+
+[sources]
+# Nothing arrives from a registry or a git remote that is not named here.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

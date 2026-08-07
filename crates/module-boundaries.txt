@@ -67,6 +67,11 @@ lichttisch -> catalogue culling foreign ingest session surface
 # nothing ships it, so it reaches nothing here.
 bench ->
 
+# The measurement corpus generator. It writes files from a seed and reads none
+# of the modules, so it reaches nothing here. Nothing ships it either: what it
+# produces is measured against, and the corpus itself is never committed.
+corpus ->
+
 # The pull-request hygiene check. It reads text handed to it by a workflow, is
 # not one of the modules and nothing ships it, so it reaches nothing here.
 pr-hygiene ->

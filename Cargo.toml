@@ -19,6 +19,7 @@ members = [
     "crates/session",
     "crates/surface",
     "tools/bench",
+    "tools/corpus",
     "tools/pr-hygiene",
 ]
 
