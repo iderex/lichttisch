@@ -45,6 +45,7 @@ reference iderex/retusche a repository on GitHub, the sibling project the scope 
 reference KDE/digikam a repository on GitHub, the second application the integration decision weighed
 reference LibRaw/LibRaw a repository on GitHub, the other decoder candidate
 reference card-03/DCIM/104CANON/IMG_0412.CR3 the tree a camera writes, shown so the corpus note says which shape it generates rather than describing it
+reference catalogue.lock the file a catalogue directory holds at run time, named by the locking note so an operator finding one knows what it is
 reference library/2024/2024-06-12/session-0031/... the tree an import produces, shown for the same reason and deliberately ending in an ellipsis
 reference docs/decisions/NNNN-slug.md the naming rule for a decision record, written as the pattern rather than as one record
 reference tests/fixtures/ declared in .gitattributes before the first fixture lands, deliberately and with the reason on the line above the declaration
