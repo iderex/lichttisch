@@ -102,6 +102,13 @@ breaks the suite or drops line coverage below the declared floor.
 `rustfmt.toml`, and a merge tripping a lint the workspace manifest declares as
 an error.
 
+`static-analysis`, from `.github/workflows/static-analysis.yml`, job
+`static-analysis`, added by #16. Prevents a merge pulling in a dependency the
+advisory database has an entry against, one nobody maintains any more, one whose
+licence is not on the allow list in `deny.toml`, or one arriving from a source
+that file does not name. `docs/static-analysis.md` says what it is proven to
+refuse and how small the graph it judges is today.
+
 `DCO sign-off`, from `.github/workflows/dco.yml`, job `dco`. Prevents a merge
 carrying a commit whose author has not asserted the certificate in `DCO.md`.
 

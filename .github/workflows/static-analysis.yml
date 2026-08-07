@@ -1,0 +1,168 @@
+# The static analysis gate (#16).
+#
+# The formatting and lint gate judges the code this tree writes. This one
+# judges what the tree pulls in: an advisory against a dependency, a crate
+# nobody maintains any more, a licence nobody agreed to, and a package arriving
+# from somewhere that was never named. That matters more here than in an
+# average project, because this tree links image and metadata parsers, which is
+# where advisories in this field land.
+#
+# What it refuses is in deny.toml and not on the command line below. A
+# threshold passed as a workflow argument is a rule a local run cannot see, and
+# the two stop agreeing on the day one of them changes. This file says when the
+# gate runs; deny.toml is the authority for what it refuses.
+#
+# The tool is installed at an exact version rather than through an action, the
+# same as the coverage runner in tests.yml and for the same reason. It costs a
+# compile on every run.
+#
+# No job `name:`, deliberately, for the reason build.yml gives: with none set
+# the check run takes the job id, which cannot drift apart from a label
+# somebody typed twice. The name that produces is `static-analysis`, and
+# docs/required-checks.md is where it is proposed as a merge condition.
+name: static-analysis
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["**"]
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref. Nothing here is left half done by
+# being cancelled: the job writes only inside its own runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    # Longer than the other gates because the tool is compiled rather than
+    # downloaded, and the proof below resolves three throwaway packages against
+    # the registry.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State which tool judged the tree
+        # A verdict belongs to one exact version of one tool against one
+        # advisory database. A log that does not say which is a log nobody can
+        # reproduce.
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Install the analyser
+        run: cargo install cargo-deny --locked --version 0.18.6
+
+      - name: Report the version that will judge
+        run: cargo deny --version
+
+      - name: Run the analysis over the whole graph
+        # No check named on the command line, so every check deny.toml
+        # configures runs. The database is fetched here rather than read from
+        # whatever the runner had: `--disable-fetch` is deliberately absent, so
+        # a run that cannot reach it fails. The step below is the proof of
+        # that rather than this comment.
+        run: cargo deny check
+
+      - name: Prove the gate bites, for the reason it names
+        # A gate nobody has watched go red is a gate nobody knows is on. Five
+        # legs, each a deliberately introduced finding paired with the
+        # one-change neighbour that does not carry it, so a refusal cannot be
+        # read as the fixture being broken in some other way. A leg that passed
+        # where it should have failed ends this step non-zero, which reds the
+        # gate rather than printing a note nobody reads.
+        #
+        # The legs run the real deny.toml, not a copy written for them. A proof
+        # against a fixture configuration would prove a fixture.
+        run: |
+          set -euo pipefail
+
+          config="${GITHUB_WORKSPACE}/deny.toml"
+          work="$(mktemp -d)"
+          out="${work}/out.txt"
+
+          # A package depending on nothing, with one licence and at most one
+          # dependency. Those are the only things that differ between a leg and
+          # its neighbour, so what caused a refusal is not a matter of opinion.
+          fixture() {
+            local dir="$1" licence="$2" dependency="${3:-}"
+            mkdir -p "${dir}/src"
+            printf 'fn main() {}\n' > "${dir}/src/main.rs"
+            {
+              printf '[package]\nname = "gate-fixture"\nversion = "0.0.0"\nedition = "2021"\n'
+              printf 'license = "%s"\n' "$licence"
+              if [ -n "$dependency" ]; then
+                printf '\n[dependencies]\n%s\n' "$dependency"
+              fi
+            } > "${dir}/Cargo.toml"
+            ( cd "$dir" && cargo generate-lockfile --quiet )
+          }
+
+          bites() {
+            local name="$1" reason="$2"; shift 2
+            local rc=0
+            "$@" > "$out" 2>&1 || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "::error::${name}: the gate passed something it exists to refuse."
+              sed -n '1,40p' "$out"
+              exit 1
+            fi
+            if ! grep -qE "$reason" "$out"; then
+              echo "::error::${name}: the gate failed with exit ${rc}, but not for the reason it names."
+              sed -n '1,40p' "$out"
+              exit 1
+            fi
+            echo "ok    ${name}: exit ${rc}, refused as ${reason}"
+          }
+
+          passes() {
+            local name="$1"; shift
+            local rc=0
+            "$@" > "$out" 2>&1 || rc=$?
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::${name}: expected a clean run, got exit ${rc}."
+              sed -n '1,40p' "$out"
+              exit 1
+            fi
+            echo "ok    ${name}: exit 0"
+          }
+
+          fixture "${work}/rejected" "SSPL-1.0"
+          fixture "${work}/allowed"  "MIT"
+          # A crate carrying advisories against every published version, so the
+          # leg does not stop biting when a fix arrives upstream. Pinned
+          # exactly, so the leg tests a constant rather than whatever resolves.
+          fixture "${work}/advisory" "MIT" 'atty = "=0.2.14"'
+
+          bites "an unlisted licence" 'error\[rejected\]' \
+            cargo deny --manifest-path "${work}/rejected/Cargo.toml" check --config "$config" licenses
+          passes "the same fixture carrying a listed licence" \
+            cargo deny --manifest-path "${work}/allowed/Cargo.toml" check --config "$config" licenses
+
+          bites "a dependency carrying an advisory" 'error\[(vulnerability|unmaintained|unsound)\]' \
+            cargo deny --manifest-path "${work}/advisory/Cargo.toml" check --config "$config" advisories
+          passes "the same fixture without that dependency" \
+            cargo deny --manifest-path "${work}/allowed/Cargo.toml" check --config "$config" advisories
+
+          # The database leg. The real configuration with the database pointed
+          # at an empty directory and fetching disabled, which is the shape of a
+          # run that could not reach it. It has to fail: an advisories check
+          # that returned a clean verdict from no database at all is the quiet
+          # pass this gate exists to prevent.
+          mkdir -p "${work}/emptydb"
+          sed -e "s|^\[advisories\]\$|[advisories]\ndb-path = \"${work}/emptydb\"|" "$config" > "${work}/nodb.toml"
+          bites "an advisory database that cannot be read" 'failed to open advisory database' \
+            cargo deny --manifest-path "${work}/allowed/Cargo.toml" check --config "${work}/nodb.toml" --disable-fetch advisories
+
+          echo "every leg held"
