@@ -20,13 +20,17 @@
 //! its colour.
 //!
 //! Two passes back to back measure how quiet one machine was over one minute.
-//! They say nothing about the difference between two machines on two days, and
-//! the margin is set above the widest gap that has been observed rather than at
-//! it.
+//! They say nothing about the difference between two machines, and on the fleet
+//! this gate runs on that difference turned out to be the larger one by two
+//! orders of magnitude. So the machine is a condition rather than an assumption:
+//! a baseline is chosen by the processor it was recorded on, and a run on a
+//! processor no baseline covers is reported as judging nothing rather than
+//! judged against somebody else's machine. `CONDITIONS_THAT_MUST_MATCH` carries
+//! the measurement that forced it.
 //!
-//! A baseline recorded somewhere else is refused rather than compared against.
-//! The conditions travel with the numbers, and a number produced under
-//! different conditions is a different number wearing the same case name.
+//! What that costs is stated here rather than left to be found. A green verdict
+//! from this gate means either that every case held or that no baseline applied,
+//! and only the run's own output distinguishes them.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -37,11 +41,25 @@ use crate::stats::Outcome;
 /// judged against it.
 ///
 /// Not every condition, and the omission is the point. `host_identity` is
-/// always `not recorded`, so requiring it would compare two constants. The six
-/// below are the ones that change a duration: the machine, the build, and what
-/// the harness was asked to measure.
-pub const CONDITIONS_THAT_MUST_MATCH: [&str; 6] =
-    ["arch", "cpus", "os", "profile", "samples_asked_for", "seed"];
+/// always `not recorded`, so requiring it would compare two constants. The
+/// seven below are the ones that change a duration: the machine, the build, and
+/// what the harness was asked to measure.
+///
+/// `cpu_model` is on this list because of a measurement rather than because it
+/// looked sensible. On `ubuntu-latest` two runs of one tree came back 13.9 and
+/// 17.4 percent apart, and two runs on one processor came back 0.03 percent
+/// apart. Without this entry the margin would have to sit above the first
+/// figure, and a gate that only refuses a doubling is a gate that catches
+/// nothing anybody would ship.
+pub const CONDITIONS_THAT_MUST_MATCH: [&str; 7] = [
+    "arch",
+    "cpu_model",
+    "cpus",
+    "os",
+    "profile",
+    "samples_asked_for",
+    "seed",
+];
 
 /// What the gate decided about one case.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +137,39 @@ pub fn conditions_that_differ(baseline: &Run, run: &Run) -> Vec<ConditionMismatc
         }
     }
     differences
+}
+
+/// Which recorded baseline, out of several, this run may be judged against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Chosen<'a> {
+    /// Exactly one was recorded under the conditions this run is under.
+    TheOne(&'a str),
+    /// None was. This run cannot be judged and must not be read as one that
+    /// was.
+    NoneForTheseConditions,
+    /// More than one claims the same conditions, which is a defect in the tree
+    /// rather than a question about this run.
+    MoreThanOne(Vec<&'a str>),
+}
+
+/// Pick the baseline recorded under the conditions this run is under.
+///
+/// A directory of baselines is how one gate covers a fleet that hands out more
+/// than one machine. The alternative was one file and a margin above the
+/// difference between two processors, which measured 17.4 percent, and a gate
+/// that only refuses a doubling refuses nothing worth catching.
+#[must_use]
+pub fn choose<'a>(recorded: &'a [(String, Run)], run: &Run) -> Chosen<'a> {
+    let matching: Vec<&str> = recorded
+        .iter()
+        .filter(|(_, baseline)| conditions_that_differ(baseline, run).is_empty())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    match matching.len() {
+        0 => Chosen::NoneForTheseConditions,
+        1 => Chosen::TheOne(matching[0]),
+        _ => Chosen::MoreThanOne(matching),
+    }
 }
 
 /// Judge two passes of one run against a baseline, case by case.
@@ -247,7 +298,7 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use super::{Verdict, conditions_that_differ, judge};
+    use super::{Chosen, Verdict, choose, conditions_that_differ, judge};
     use crate::report::Run;
     use crate::stats::{Outcome, Summary};
 
@@ -465,6 +516,54 @@ mod tests {
         let differences = conditions_that_differ(&baseline, &older);
         assert_eq!(differences.len(), 1, "{differences:?}");
         assert_eq!(differences[0].run, "absent");
+    }
+
+    /// One recorded baseline, named the way the tree names them, on a stated
+    /// processor.
+    fn recorded(name: &str, processor: &str) -> (String, Run) {
+        let mut baseline = run(&[("sort", measured(1_000))]);
+        baseline
+            .conditions
+            .insert("cpu_model".to_owned(), processor.to_owned());
+        (name.to_owned(), baseline)
+    }
+
+    #[test]
+    fn the_baseline_recorded_on_this_processor_is_the_one_that_judges() {
+        // The measurement this exists for: two runs of one tree on the runner
+        // fleet came back 13.9 and 17.4 percent apart because the fleet handed
+        // out two processors, while two runs on one processor came back 0.03
+        // percent apart. Judging against the wrong one is judging against
+        // another machine.
+        let baselines = [recorded("first.txt", "one"), recorded("second.txt", "two")];
+        let mut here = run(&[("sort", measured(1_000))]);
+        here.conditions
+            .insert("cpu_model".to_owned(), "two".to_owned());
+        assert_eq!(choose(&baselines, &here), Chosen::TheOne("second.txt"));
+    }
+
+    #[test]
+    fn a_processor_no_baseline_was_recorded_on_chooses_nothing() {
+        let baselines = [recorded("first.txt", "one"), recorded("second.txt", "two")];
+        let mut here = run(&[("sort", measured(1_000))]);
+        here.conditions
+            .insert("cpu_model".to_owned(), "three".to_owned());
+        assert_eq!(choose(&baselines, &here), Chosen::NoneForTheseConditions);
+    }
+
+    #[test]
+    fn two_baselines_claiming_one_set_of_conditions_name_each_other() {
+        // The failure this is against: a second baseline added for a machine
+        // that already had one, with whichever sorted first quietly deciding
+        // every verdict afterwards.
+        let baselines = [recorded("first.txt", "one"), recorded("copy.txt", "one")];
+        let mut here = run(&[("sort", measured(1_000))]);
+        here.conditions
+            .insert("cpu_model".to_owned(), "one".to_owned());
+        assert_eq!(
+            choose(&baselines, &here),
+            Chosen::MoreThanOne(vec!["first.txt", "copy.txt"])
+        );
     }
 
     #[test]

@@ -259,6 +259,7 @@ fn execute(options: &Options) -> Run {
     );
     conditions.insert("seed".to_owned(), options.seed.to_string());
     conditions.insert("samples_asked_for".to_owned(), options.samples.to_string());
+    conditions.insert("cpu_model".to_owned(), cpu_model());
     // Named rather than left out. A reader comparing two files wants to know
     // whether the machine was the same one, and this harness cannot tell them.
     conditions.insert("host_identity".to_owned(), "not recorded".to_owned());
@@ -271,6 +272,31 @@ fn execute(options: &Options) -> Run {
         );
     }
     Run { conditions, cases }
+}
+
+/// Which processor produced these durations, where the machine says so.
+///
+/// This is not decoration. Two runs of one tree on `ubuntu-latest` were
+/// measured 13.9 and 17.4 percent apart while two runs on one processor were
+/// measured 0.03 percent apart, so the processor is the whole of the difference
+/// between two runs of this harness on that fleet, and a baseline that does not
+/// name it is a number from another machine.
+///
+/// Read from the one file that states it, and reported as unread where there is
+/// no such file rather than guessed at. Two machines that both report it as
+/// unread compare as though they were one machine, which is the same hole
+/// `host_identity` already declares and is stated here for the same reason.
+fn cpu_model() -> String {
+    let Ok(text) = std::fs::read_to_string("/proc/cpuinfo") else {
+        return "not readable on this platform".to_owned();
+    };
+    text.lines()
+        .filter_map(|line| line.split_once(':'))
+        .find(|(key, _)| key.trim() == "model name")
+        .map_or_else(
+            || "not named in /proc/cpuinfo".to_owned(),
+            |(_, value)| value.trim().to_owned(),
+        )
 }
 
 fn print_table(run: &Run) {
@@ -359,40 +385,62 @@ fn print_comparison(before: &Run, after: &Run, path: &std::path::Path) {
 /// baseline at all, which is a failure of the gate rather than a verdict about
 /// the code.
 fn run_the_gate(path: &Path, margin: i64, first: &Run, second: &Run) -> Result<bool, String> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|err| format!("could not read the baseline {}: {err}", path.display()))?;
-    let baseline = Run::from_text(&text)
-        .map_err(|message| format!("{} is not a result file: {message}", path.display()))?;
+    let recorded = read_baselines(path)?;
+    let chosen = gate::choose(&recorded, first);
 
-    println!(
-        "gate against {}, margin {}",
-        path.display(),
-        magnitude(margin)
-    );
-
-    // A baseline recorded elsewhere is refused rather than compared against.
-    // Two runs under different conditions are two different measurements
-    // wearing one case name, and this is the one place in the harness where
-    // that difference decides something rather than being printed for a reader.
-    let differences = gate::conditions_that_differ(&baseline, first);
-    if !differences.is_empty() {
-        println!();
-        for difference in &differences {
-            println!(
-                "    {} was {} when the baseline was recorded and is {} here",
-                difference.condition, difference.baseline, difference.run
-            );
+    let name = match &chosen {
+        gate::Chosen::TheOne(name) => (*name).to_owned(),
+        gate::Chosen::MoreThanOne(names) => {
+            return Err(format!(
+                "{} holds more than one baseline recorded under the conditions this run is \
+                 under, so which one judges would be whichever sorted first: {}",
+                path.display(),
+                names.join(", ")
+            ));
         }
-        println!();
-        println!(
-            "The baseline was not recorded under the conditions this run is under, so nothing \
-             here was judged. Record a baseline on this machine, or run the gate where the \
-             baseline came from."
-        );
-        return Ok(false);
-    }
+        gate::Chosen::NoneForTheseConditions => {
+            // Reported, not refused. This fleet hands out more than one
+            // machine, so a machine nobody has recorded a baseline for is an
+            // ordinary event rather than a defect in the change under test, and
+            // a red gate here would block a queue on something the change did
+            // not touch. What it costs is that a green tick from this gate
+            // means either "judged and held" or "could not judge", and only the
+            // run itself says which. docs/required-checks.md carries that.
+            println!(
+                "gate against {}, margin {}",
+                path.display(),
+                magnitude(margin)
+            );
+            println!();
+            for condition in gate::CONDITIONS_THAT_MUST_MATCH {
+                println!(
+                    "    {condition}={}",
+                    first
+                        .conditions
+                        .get(condition)
+                        .map_or("absent", String::as_str)
+                );
+            }
+            println!();
+            println!(
+                "No baseline in {} was recorded under those conditions, so this run judged \
+                 nothing and must not be read as one that judged and held. Record one by \
+                 putting a result file from this machine there, in a change that says why.",
+                path.display()
+            );
+            return Ok(true);
+        }
+    };
 
-    let verdicts = gate::judge(&baseline, first, second, margin);
+    let baseline = recorded
+        .iter()
+        .find(|(recorded_name, _)| *recorded_name == name)
+        .map(|(_, baseline)| baseline)
+        .ok_or_else(|| format!("the chosen baseline {name} is not among the ones read"))?;
+
+    println!("gate against {name}, margin {}", magnitude(margin));
+
+    let verdicts = gate::judge(baseline, first, second, margin);
     println!();
     print_verdicts(&verdicts);
 
@@ -412,7 +460,46 @@ fn run_the_gate(path: &Path, margin: i64, first: &Run, second: &Run) -> Result<b
         );
     }
 
-    Ok(print_refusals(&verdicts, path, margin))
+    Ok(print_refusals(&verdicts, &name, margin))
+}
+
+/// Every baseline the gate was pointed at, named by its path.
+///
+/// One file is one baseline. A directory is every result file in it, which is
+/// how one gate covers a fleet that hands out more than one machine. A file in
+/// there that will not parse stops the run rather than being skipped: a
+/// baseline nobody can read and a baseline that does not apply are opposite
+/// states, and a gate that treated them alike would go quiet the day one was
+/// mistyped.
+fn read_baselines(path: &Path) -> Result<Vec<(String, Run)>, String> {
+    let mut paths = Vec::new();
+    if path.is_dir() {
+        let entries = std::fs::read_dir(path)
+            .map_err(|err| format!("could not read {}: {err}", path.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|err| format!("could not read {}: {err}", path.display()))?;
+            let found = entry.path();
+            if found.extension().is_some_and(|kind| kind == "txt") {
+                paths.push(found);
+            }
+        }
+        paths.sort();
+        if paths.is_empty() {
+            return Err(format!("{} holds no result file", path.display()));
+        }
+    } else {
+        paths.push(path.to_path_buf());
+    }
+
+    let mut baselines = Vec::with_capacity(paths.len());
+    for found in paths {
+        let text = std::fs::read_to_string(&found)
+            .map_err(|err| format!("could not read the baseline {}: {err}", found.display()))?;
+        let run = Run::from_text(&text)
+            .map_err(|message| format!("{} is not a result file: {message}", found.display()))?;
+        baselines.push((found.display().to_string(), run));
+    }
+    Ok(baselines)
 }
 
 /// The verdict table, one row per case.
@@ -477,7 +564,7 @@ fn print_verdicts(verdicts: &BTreeMap<String, Verdict>) {
 /// Returns whether the run held. The sentences are separate from the table
 /// above so that a refusal is legible in a log somebody is scrolling rather
 /// than one row among however many the harness has grown to.
-fn print_refusals(verdicts: &BTreeMap<String, Verdict>, path: &Path, margin: i64) -> bool {
+fn print_refusals(verdicts: &BTreeMap<String, Verdict>, baseline: &str, margin: i64) -> bool {
     let refused: Vec<(&String, &Verdict)> = verdicts
         .iter()
         .filter(|(_, verdict)| verdict.refuses())
@@ -494,17 +581,16 @@ fn print_refusals(verdicts: &BTreeMap<String, Verdict>, path: &Path, margin: i64
                 judged_ns,
                 tenths_of_a_percent,
             } => println!(
-                "refused: {name} is {} against {}, which is {} to {} and is past the {} margin",
+                "refused: {name} is {} against {baseline}, which is {} to {} and is past the {} \
+                 margin",
                 percent(*tenths_of_a_percent),
-                path.display(),
                 nanoseconds(*baseline_ns),
                 nanoseconds(*judged_ns),
                 magnitude(margin),
             ),
             Verdict::GoneFromTheRun => println!(
-                "refused: {} carries {name} and this run does not measure it, so its baseline \
-                 judges nothing. Remove it from the baseline in a change that says why.",
-                path.display(),
+                "refused: {baseline} carries {name} and this run does not measure it, so its \
+                 baseline judges nothing. Remove it from the baseline in a change that says why."
             ),
             _ => {}
         }
