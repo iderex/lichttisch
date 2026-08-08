@@ -27,7 +27,9 @@
 //!   check that reads before it takes and lets two through the window between.
 //!
 //! Nothing here needs elevation, a network, a display or a device. The only
-//! thing it needs is a writable temporary directory.
+//! thing it needs is a writable scratch directory, and it takes that from the
+//! one Cargo sets aside for an integration test rather than from the system
+//! temporary directory.
 
 #![allow(
     clippy::expect_used,
@@ -65,6 +67,17 @@ const RACERS: usize = 4;
 /// Distinguishes the directories of tests running side by side in one process.
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
+/// Where the scratch directories go.
+///
+/// Cargo sets this for an integration test and the compiler resolves it, so
+/// nothing here reads the running process's environment for it. That is the
+/// difference that matters rather than a tidier location: the local threat
+/// model the code scanning gate is configured with treats a value read out of
+/// the environment as untrusted input, so `std::env::temp_dir()` standing here
+/// made every path this fixture built a tainted one and carried the taint into
+/// `catalogue::lock` through the calls below.
+const SCRATCH_ROOT: &str = env!("CARGO_TARGET_TMPDIR");
+
 /// A directory of its own for one test, removed when the test ends.
 struct Scratch {
     path: PathBuf,
@@ -73,9 +86,9 @@ struct Scratch {
 impl Scratch {
     fn new(name: &str) -> Self {
         let unique = NEXT.fetch_add(1, Ordering::Relaxed);
-        let path =
-            env::temp_dir().join(format!("lichttisch-{name}-{}-{unique}", std::process::id()));
-        fs::create_dir_all(&path).expect("a temporary directory has to be creatable");
+        let path = Path::new(SCRATCH_ROOT)
+            .join(format!("lichttisch-{name}-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&path).expect("a scratch directory has to be creatable");
         Self { path }
     }
 

@@ -187,11 +187,28 @@ mod tests {
         }
     }
 
-    /// A directory of this run's own, under the system temporary directory.
+    /// A directory of this run's own, under the workspace target directory.
     /// No dependency, and no two tests sharing a path.
+    ///
+    /// The root is resolved by the compiler rather than read out of the
+    /// environment while the test runs, and that is the whole reason it is
+    /// written this way. `std::env::temp_dir()` stood here, and under the local
+    /// threat model the code scanning gate is configured with, a value the
+    /// process reads from its environment is untrusted input: every path built
+    /// from it reached `put` and `write_one` as a tainted one, so two functions
+    /// that never see an argument in production were reported as building a
+    /// path out of one. The same crate already resolves the workspace root this
+    /// way for the test that reads `.gitignore`, and `target` is where this
+    /// tool's own default output goes.
     fn scratch(label: &str) -> PathBuf {
-        let mut path = std::env::temp_dir();
-        path.push(format!("lichttisch-corpus-{}-{label}", std::process::id()));
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or(manifest)
+            .join("target")
+            .join("corpus-scratch");
+        let path = root.join(format!("lichttisch-corpus-{}-{label}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).expect("a scratch directory");
         path
