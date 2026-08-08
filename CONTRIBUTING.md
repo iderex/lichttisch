@@ -75,6 +75,37 @@ change to each one is a change inside a boundary rather than a change that
 invents one, and the dependency direction between them is declared in each
 manifest.
 
+## Tests that need something this machine may not have
+
+The default suite runs with no display, no elevated rights, no camera and no
+accelerator, and a test that needs one of those is marked with which one so it
+is skipped rather than failing on a machine that simply does not have it.
+
+Which tests are marked, and what each is waiting for:
+
+    git grep -n '#\[ignore = "' -- 'crates/**/*.rs' 'tools/**/*.rs' ; echo "exit=$?"
+    exit=1
+
+Exit 1 is the clean answer: none today. The reason travels with the mark, so
+this one command answers both halves of the question, and a marked test appears
+here the moment somebody writes one. What the two permitted prefixes are, what
+refuses a bare mark, and how to run the marked set where the hardware is, are in
+[docs/tests.md](docs/tests.md) rather than repeated here.
+
+Four resources and three different strengths, which is worth keeping apart
+because one sentence covering all four would overstate two of them. The
+exclusion of the marked set is by construction: an ignored test is skipped
+without anybody passing a flag, and the run says how many it skipped. The
+absence of the four resources on the runner is printed and not asserted:
+`.github/workflows/tests.yml` reports the user, the uid, the display, the
+Wayland display and the device nodes it found, so a reader can check what the
+run actually had. Nothing fails on any of it, and a hosted runner is not a place
+where the absence of a route to elevation could be shown by running there
+anyway. And an unmarked test that reaches for one of the four is caught by
+nothing at all: it fails at its own assertion, wherever that is, rather than at
+the point where the resource was missing. Issue #106 is where those last two
+become something that refuses rather than something that prints.
+
 ## The gates, and running them before you push
 
 The tree is the authority for which gates exist. This document names the
