@@ -60,3 +60,4 @@ reference library/2024/2024-06-12/session-0031/... the tree an import produces, 
 reference docs/decisions/NNNN-slug.md the naming rule for a decision record, written as the pattern rather than as one record
 reference tests/fixtures/ declared in .gitattributes before the first fixture lands, deliberately and with the reason on the line above the declaration
 reference crates/signals/ the older name for the module that holds the culling signals, quoted by the signal interface record so the difference from crates/culling is stated rather than left for a reader to trip over
+reference rust/path-injection the identifier of a query in the analysis suite the code scanning note names, which is written the way the analysis prints it rather than as anything this tree holds

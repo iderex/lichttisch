@@ -72,20 +72,75 @@ printed by the judgement and is not what reds the check. The run prints how many
 results it examined and how many carried no score, so a reader can see the
 difference rather than assume it.
 
-It is not a statement about the whole tree either, and on a pull request it is
-narrower than that in a way worth naming. The analysis is source-only for this
-language, so what it sees is what the workspace resolves to at that commit. On
-top of that, when the run belongs to a pull request the analysis restricts the
-alerts it keeps to the lines that pull request changed. It says so in its own
-log, which prints `Computing PR diff ranges` and then hands a diff range
-extension pack to the query run. So a green gate on a pull request says the
-change introduced no finding, not that the tree holds none. The whole-tree
-statement is the run on the default branch after the merge, which belongs to no
-pull request and therefore has no diff to be restricted to.
+It is a statement about the workspace at that commit, and not about the
+repository. The analysis is source-only for this language, so what it sees is
+what the workspace resolves to, and a file no member pulls in is a file no query
+was run over.
 
-That restriction is left on for the gate, because there the change is exactly
-what is being judged. It is turned off in the near-miss job, and the reason is
-below.
+It is a statement about the whole of that workspace on both events, and it was
+not always. Left at its default, the analysis restricts a pull request's alerts
+to the lines that pull request changed: the log prints `Computing PR diff ranges`
+and hands a diff range extension pack to the query run. The gate now turns that
+off, in the `env` block of the job in
+`.github/workflows/code-scanning.yml`, so a pull request and the push that
+follows the merge ask one question rather than two. The next section is what
+forced it.
+
+## What the two events used to answer, and what that cost
+
+The gate went red on every push to the default branch from the day it landed and
+green on every pull request, and both were correct answers to different
+questions. Twenty results, one query and one severity, read out of the last of
+those pushes:
+
+    gh run view 31268516008 --log-failed | grep -oE 'over  rust/path-injection security-severity=7.5 [^ ]+$' | awk '{print $NF}' | sort | uniq -c
+          5 crates/catalogue/src/lock.rs
+          4 crates/catalogue/tests/single_writer.rs
+         11 tools/corpus/src/write.rs
+
+None of the twenty fell on a line any pull request had changed, so the diff
+restriction discarded all of them before the judgement on a pull request saw
+one, and the same twenty were there for the judgement on the push afterwards.
+A check that answers a narrower question before a merge than after it cannot be
+a merge condition, which is what `docs/required-checks.md` proposes this one as.
+Turning the restriction off is what makes the check a pull request passes the
+same check the default branch runs.
+
+What it costs is the whole workspace analysed once per pull request rather than
+the lines it changed, and a pull request refused for a finding it did not
+introduce. The second is the harder one and it is deliberate. A finding nobody
+introduced is still a finding in the tree, and the alternative is the
+arrangement this section describes, where it is nobody's and lands anyway.
+
+## What the twenty were
+
+One query, `rust/path-injection`, at security severity 7.5, in
+`tools/corpus/src/write.rs`, `crates/catalogue/src/lock.rs` and
+`crates/catalogue/tests/single_writer.rs`. Every one of the twenty flows began
+at the same call in the same two fixtures: `std::env::temp_dir()`, once in the
+scratch helper of each. The local threat model asked for above is what makes an
+environment read untrusted input, so a scratch directory built from it was a
+tainted path, and it carried the taint into the functions the fixtures called.
+Five of the twenty were reported inside the locking module, which takes a
+directory from its caller and never reads the environment itself.
+
+So the answer to all twenty is one answer, and it is neither an exclusion nor a
+move in the floor. The two fixtures now take their scratch root from a value the
+compiler resolves rather than one the process reads: the directory Cargo sets
+aside for an integration test in the first, and the workspace directory this
+tool's own default output already goes to in the second. Nothing about the
+program that ships changed, because nothing about the program that ships was
+what the query had found.
+
+What that does not cover is the case the finding names in production, where a
+path really is assembled from something the process was handed. The corpus tool
+takes an output directory on the command line and the catalogue takes one from
+its caller, and neither validates it. That is untouched here and it is not the
+same question: a photographer naming their own folder is not an attacker, and a
+path arriving from a sidecar, a card or another program is a different input
+from one an operator typed. The query is still on, at the same floor, over both
+of those surfaces, so the day one of them is reached from an input this program
+did not get from a person, the gate says so.
 
 ## The two near-misses
 
@@ -112,12 +167,18 @@ a deliberate defect would sit in the repository's scanning surface for as long
 as it existed, and a finding nobody intends to fix is how a scanning surface
 stops being read.
 
-The second one also runs with the diff restriction turned off, and that is the
-second correction rather than a preference. The program it analyses is written
-by the job, so it appears in no pull request's diff, and every alert about it
-was discarded before the check could read one. Both failures produced the same
+The second one had the diff restriction turned off before the gate did, and that
+was a correction rather than a preference. The program it analyses is written by
+the job, so it appears in no pull request's diff, and every alert about it was
+discarded before the check could read one. Both failures produced the same
 symptom: an analysis that reported nothing, which reads as an analyser that
 cannot see the language. Neither was that.
+
+Which is worth reading beside the section above. The same restriction was wrong
+in both jobs, for reasons that look unrelated and are the same one: an analysis
+told to keep only what a diff touched says nothing about anything the diff did
+not touch, and in neither job is the diff the subject. It was corrected in one
+of them first because that is where it failed loudly.
 
 The second one is written into the job's own working directory, and the job
 checks this repository out nowhere. That is not tidiness. The first attempt
