@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Putting the plan on disk, and saying exactly what went there.
 //!
 //! The bytes of a file are a function of its planned content seed and its

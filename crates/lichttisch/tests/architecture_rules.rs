@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The structural rules, as things that fail (#105).
 //!
 //! The decision records state rules about shape rather than about behaviour:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The pull-request hygiene check (#137).
 //!
 //! `CONTRIBUTING.md` asks a pull request body to name the issue it closes and

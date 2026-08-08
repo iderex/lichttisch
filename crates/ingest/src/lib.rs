@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Ingest and decoding.
 //!
 //! The only module allowed to depend on an image library, and it reaches one

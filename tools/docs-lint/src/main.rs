@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The documentation lint (#103).
 //!
 //! This plan puts a great deal in documents: decision records, the gate

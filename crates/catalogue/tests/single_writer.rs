@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! One writer per catalogue, proven against real processes (#35).
 //!
 //! The unit tests beside the module judge the parts that are pure: which paths

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The judgement, as pure functions over text (#137).
 //!
 //! Nothing here reads a file, a network or a clock. Everything the verdict

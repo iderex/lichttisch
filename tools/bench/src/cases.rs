@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The cases, and the one that cannot run here.
 //!
 //! Two of these measure work this project does not do yet. They are here so

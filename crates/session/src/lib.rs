@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The culling session, as a headless state machine.
 //!
 //! The session holds what the operator is doing and answers questions about it.

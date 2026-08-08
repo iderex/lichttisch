@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Re-running the commands a document pastes an output under (#148).
 //!
 //! A number pasted under the command that produced it is the shape this tree

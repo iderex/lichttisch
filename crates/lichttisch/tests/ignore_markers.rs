@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The convention for a test that cannot run here (#17).
 //!
 //! Some tests will need a camera on the end of a cable, or an accelerator, or

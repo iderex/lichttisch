@@ -33,6 +33,24 @@ existing commits:
 Not by adding a commit that signs off on behalf of the earlier ones. The gate
 reads every non-merge commit in the range, so the earlier ones are still there.
 
+## What you grant
+
+A contribution is offered under the terms this project is under, which are in
+[LICENSE](LICENSE) and identified as `AGPL-3.0-only`. You keep your copyright.
+Nothing here asks you to assign it or to grant anything wider than those terms,
+and no separate agreement is collected.
+
+That is the same statement the sign-off already makes rather than a second one
+beside it. The certificate in [DCO.md](DCO.md) is written in terms of "the open
+source license indicated in the file", so what a contributor certifies depends
+on the file saying which licence that is. Every source file now opens with the
+identifier, which is what makes the certificate say something definite. How that
+is kept true is [docs/licensing.md](docs/licensing.md).
+
+The two are different halves and neither replaces the other. The sign-off is
+about the origin of the work and your right to submit it. This paragraph is
+about the terms it arrives under.
+
 ## Building
 
 One command, from a fresh clone:

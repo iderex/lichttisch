@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The catalogue and its storage.
 //!
 //! What a photograph is to this module is `docs/decisions/0010-catalogue-schema.md`,
