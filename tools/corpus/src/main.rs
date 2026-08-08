@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The measurement corpus (#4).
 //!
 //! The readme claims a hundred thousand-plus images. Nothing on this board may

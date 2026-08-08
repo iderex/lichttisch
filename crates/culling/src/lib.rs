@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The culling signals.
 //!
 //! The only module allowed to depend on an inference runtime, and it reaches

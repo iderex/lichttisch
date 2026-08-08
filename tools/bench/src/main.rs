@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The benchmark harness (#25).
 //!
 //! The performance bar is a set of numbers, and numbers produced by different

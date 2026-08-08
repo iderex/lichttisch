@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! What the corpus is, worked out before a byte is written.
 //!
 //! Everything here is a function of the parameters and nothing else. No clock

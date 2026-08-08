@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Samples, and the numbers taken out of them.
 //!
 //! Kept apart from the running and the printing because this is the part that

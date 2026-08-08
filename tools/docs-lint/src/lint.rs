@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The judgement, as pure functions over text.
 //!
 //! Every rule here takes strings and returns findings. Nothing reaches the

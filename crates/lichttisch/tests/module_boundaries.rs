@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The module boundary guard (#19).
 //!
 //! The catalogue answers queries. Decoding parses files that arrived from a

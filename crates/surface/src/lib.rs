@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The operator surface, as a thin renderer over `session`.
 //!
 //! Nothing decides anything here. Whether this project ships a surface of its

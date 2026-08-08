@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Judging a run against a recorded baseline (#107).
 //!
 //! A number in a document is a claim. A number a check refuses to fall below is

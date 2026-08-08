@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! One writer per catalogue, refused rather than serialised (#35).
 //!
 //! Two instances writing one catalogue is a corruption bug that presents as a

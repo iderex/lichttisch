@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The result file, and the difference between two of them.
 //!
 //! A number is only comparable to another number produced the same way, so the

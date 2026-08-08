@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The whole foreign-function surface.
 //!
 //! Every declaration of a foreign function, and every conversion of a foreign

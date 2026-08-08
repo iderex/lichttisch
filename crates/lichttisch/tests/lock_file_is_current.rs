@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! The lock file drift guard (#14).
 //!
 //! A lock file that no longer matches the manifests is a build that resolves
