@@ -24,6 +24,14 @@
 # cable and from a folder somebody points it at, and none of those is a network
 # request.
 #
+# Both jobs judge the whole workspace on both events, and the gate job says so
+# in its own `env` below. That is a correction rather than a setting: the
+# analysis restricts a pull request's alerts to the lines that pull request
+# changed unless it is told not to, so the gate used to ask one question before
+# a merge and a different one after it. Twenty findings that no pull request had
+# touched a line of sat in the tree, invisible on every pull request and refused
+# on every push to the default branch, which is #155.
+#
 # Two near-misses, because two different things can be wrong and each fails
 # silently in a way the other would not catch.
 #
@@ -83,6 +91,24 @@ jobs:
       contents: read
       # The analysis reads the workflow run it belongs to.
       actions: read
+
+    env:
+      # Judge the whole workspace on a pull request, the same as on a push.
+      #
+      # Left at its default, the analysis computes the diff ranges of the pull
+      # request and keeps only the alerts falling inside them. A finding that no
+      # pull request had touched a line of therefore could not appear on one,
+      # and appeared for the first time on the default branch after the merge,
+      # where nothing was waiting to be red. That is not a check a merge
+      # condition can be built on: the run a condition is evaluated on would be
+      # answering a narrower question than the run that follows it.
+      #
+      # What it costs is the whole workspace analysed once per pull request
+      # instead of the changed lines, and a pull request refused for a finding it
+      # did not introduce. Both are the point rather than the price: a green
+      # gate here now says the tree holds no finding at or above the floor, which
+      # is the sentence a reader was already taking it for.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -248,9 +274,10 @@ jobs:
       # judgement below ever saw one. That is the second way this proof failed
       # while looking like a blind analyser.
       #
-      # Off here and nowhere else. The gate job keeps the restriction, because
-      # there the diff is the change being judged; here the whole subject is a
-      # file no diff contains.
+      # Off in both jobs now, for two different reasons that arrived a day
+      # apart. Here the whole subject is a file no diff contains. In the gate it
+      # is that a pull request restricted to its own diff cannot see what the
+      # push after the merge will, which is the `env` block that job carries.
       CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
 
     steps:
