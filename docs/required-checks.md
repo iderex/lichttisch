@@ -192,6 +192,25 @@ Prevents a merge of a workflow change reintroducing template injection, an
 unpinned action, or a token wider than the job it is granted to. The name is the
 job's `name:` and not the SARIF category, for the reason set out above.
 
+`code-scanning`, from `.github/workflows/code-scanning.yml`, job
+`code-scanning`, added by #98. Prevents a merge of source carrying a security
+finding at or above the severity floor that workflow declares, which today is
+every finding an analysis attaches a security severity to.
+`docs/code-scanning.md` argues where that floor sits, what it costs, and what a
+green result here is not evidence of.
+
+`code-scanning-near-miss`, from `.github/workflows/code-scanning.yml`, job
+`code-scanning-near-miss`. Prevents a merge that leaves the check above green
+for the wrong reason. It analyses a program written to carry the defect that
+check names first and fails unless the analysis reports it, so an analysis that
+has stopped seeing anything in this language is a red check rather than a
+silent one. It is proposed for the same reason as the rest: a proof nobody has
+to pass is a proof that is off.
+
+There is a second reading of that pair worth stating, because it is the one a
+reader will have. The two names are one gate in two halves, and requiring only
+the first would leave the half that says the first is worth anything unrequired.
+
 ## What is deliberately advisory
 
 `Scorecard analysis` is not proposed. It produces no check run on a pull request

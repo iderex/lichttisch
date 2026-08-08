@@ -1,0 +1,408 @@
+# The code scanning gate for this language (#98).
+#
+# The gate this project is held to carries a code scanning analysis. This is the
+# counterpart for the language this tree is written in, pointed at the places
+# where this project's risk actually is: a path built from something the process
+# was handed, and the memory-safety surface that arrives with the foreign
+# boundary once there is one.
+#
+# What decides a red check is a severity floor rather than the presence of a
+# finding. The floor is `SEVERITY_FLOOR` below and it is 0.1, which is the
+# lowest severity an analysis attaches to a security finding, so every one of
+# them reds the check. It is set there to agree with
+# .github/workflows/dependency-review.yml, which refuses a dependency carrying
+# an advisory at low severity or above: a defect written here should not pass
+# where the same defect arriving as a dependency is refused.
+# docs/code-scanning.md is where that choice is argued, where its cost is
+# stated, and where the condition that would raise it is written.
+#
+# The analysis is asked for more than the default set. `security-extended`
+# widens it to the lower-precision security queries, and the local threat model
+# is what makes a command-line argument, an environment variable and the
+# contents of a file count as untrusted input. Without that model this program
+# has almost no sources at all: it takes bytes from removable media, from a
+# cable and from a folder somebody points it at, and none of those is a network
+# request.
+#
+# Two near-misses, because two different things can be wrong and each fails
+# silently in a way the other would not catch.
+#
+# The first is the floor itself. A gate that reads the wrong property, or
+# compares with `>` where it means `>=`, passes exactly the finding it exists to
+# refuse and looks identical from outside. The step below runs the same judgement
+# it runs on the real result over two documents that differ in one digit, one at
+# the floor and one just under it, and fails unless the first is refused and the
+# second is not.
+#
+# The second is the analysis. A gate wired to an analyser that sees nothing in
+# this language would be green forever and would say nothing. The second job
+# writes a program carrying the defect this gate names first, analyses it the
+# same way, and fails unless the analyser reports it. Nothing vulnerable is
+# committed here to do that: the program is written at run time into a job that
+# checks nothing out, so the tree carries the near-miss without carrying a
+# finding that would sit in the scanning surface forever.
+#
+# No job `name:`, deliberately, for the reason build.yml gives: with none set the
+# check run takes the job id, which cannot drift apart from a label somebody
+# typed twice. The names are `code-scanning` and `code-scanning-near-miss`, and
+# docs/required-checks.md is where the first is proposed as a merge condition.
+name: code-scanning
+
+on:
+  # Every pull request, and the default branch after a merge. Not every branch
+  # push, for the reason docs/required-checks.md gives: a branch pushed here and
+  # then opened as a pull request would fire both triggers and report twice
+  # under one name.
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+# Deny everything at the workflow level; each job grants what it needs.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The floor, as a CVSS score. Read by the judgement below and argued in
+  # docs/code-scanning.md. A finding at or above it reds the check, and 0.1 is
+  # the lowest score a security finding carries.
+  SEVERITY_FLOOR: "0.1"
+
+jobs:
+  code-scanning:
+    runs-on: ubuntu-latest
+    # The analysis is source-only for this language, so this is the time to
+    # resolve the workspace and run the queries rather than to compile it.
+    timeout-minutes: 30
+    permissions:
+      # Write the analysis into the repository's scanning surface.
+      security-events: write
+      contents: read
+      # The analysis reads the workflow run it belongs to.
+      actions: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes via git, so do not persist the GITHUB_TOKEN.
+          persist-credentials: false
+
+      - name: State which tool judged the tree
+        # A verdict belongs to one version of one analyser against one set of
+        # queries. A log that does not say which is a log nobody can reproduce.
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain
+          cargo --version
+
+      - name: Initialise the analysis
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: rust
+          # This language is extracted from source rather than from a build.
+          build-mode: none
+          # Inline rather than in a file of its own: this workflow is the
+          # authority for what it runs, and a second file would be a place the
+          # configuration could disagree from.
+          config: |
+            queries:
+              - uses: security-extended
+            threat-models:
+              - local
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:rust
+          output: sarif-results
+          # Upload whatever the analysis produced, including when the judgement
+          # below is about to fail the job, so the findings are readable in the
+          # scanning surface rather than only in this log.
+          upload: always
+
+      - name: Refuse a finding at or above the floor, and prove the floor bites
+        # The judgement is written once and used three times: on what the
+        # analysis produced, and on the two documents that differ from each
+        # other in one digit. A rule proven only against a tree that already
+        # passes it is a rule proven against nothing.
+        run: |
+          set -euo pipefail
+
+          work="${RUNNER_TEMP}"
+          judge="${work}/judge.py"
+
+          cat > "${judge}" <<'PY'
+          """Refuse a finding at or above a floor, and say what was examined."""
+
+          import json
+          import sys
+
+          floor = float(sys.argv[1])
+          path = sys.argv[2]
+
+          with open(path, encoding="utf-8") as handle:
+              document = json.load(handle)
+
+          # A rule's severity may be declared by the driver or by any pack the
+          # driver loaded. Reading only the first is the mistake that makes a
+          # gate green against an analysis it never understood.
+          severity = {}
+          for run in document.get("runs", []):
+              tool = run.get("tool", {})
+              for pack in [tool.get("driver", {})] + list(tool.get("extensions", [])):
+                  for rule in pack.get("rules") or []:
+                      score = (rule.get("properties") or {}).get("security-severity")
+                      if score is not None:
+                          severity[rule.get("id")] = float(score)
+
+          examined = 0
+          unscored = 0
+          over = []
+          for run in document.get("runs", []):
+              for result in run.get("results") or []:
+                  examined += 1
+                  rule_id = result.get("ruleId")
+                  score = severity.get(rule_id)
+                  if score is None:
+                      unscored += 1
+                      continue
+                  if score >= floor:
+                      locations = result.get("locations") or [{}]
+                      artefact = (
+                          locations[0]
+                          .get("physicalLocation", {})
+                          .get("artifactLocation", {})
+                          .get("uri", "no file")
+                      )
+                      over.append((rule_id, score, artefact))
+
+          print(f"examined={examined} result(s) floor={floor} unscored={unscored}")
+          for rule_id, score, artefact in over:
+              print(f"over  {rule_id} security-severity={score} {artefact}")
+          sys.exit(1 if over else 0)
+          PY
+
+          # A document carrying one finding, at a severity this step is told to
+          # take. The neighbour below differs from it in one digit.
+          fixture() {
+            printf '%s' '{"runs":[{"tool":{"driver":{"name":"fixture","rules":[{"id":"fixture/one","properties":{"security-severity":"'"$2"'"}}]}},"results":[{"ruleId":"fixture/one","locations":[{"physicalLocation":{"artifactLocation":{"uri":"fixture.rs"}}}]}]}]}' > "$1"
+          }
+
+          # The neighbour is one step under the floor rather than a number
+          # written here, so the pair stays a boundary if the floor moves.
+          under="$(python3 -c 'import sys; print(round(float(sys.argv[1]) - 0.1, 2))' "${SEVERITY_FLOOR}")"
+          case "${under}" in
+            -*) echo "::error::the floor leaves no severity under it, so the boundary cannot be proven."; exit 1 ;;
+          esac
+
+          fixture "${work}/at-floor.sarif" "${SEVERITY_FLOOR}"
+          fixture "${work}/under-floor.sarif" "${under}"
+
+          rc=0
+          python3 "${judge}" "${SEVERITY_FLOOR}" "${work}/at-floor.sarif" || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::the judgement passed a finding at the floor, which is what it exists to refuse."
+            exit 1
+          fi
+          echo "ok    a finding at the floor is refused"
+
+          rc=0
+          python3 "${judge}" "${SEVERITY_FLOOR}" "${work}/under-floor.sarif" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::the judgement refused a finding at ${under}, under the floor, so it would refuse work it has no reason to."
+            exit 1
+          fi
+          echo "ok    a finding at ${under}, one step under the floor, is not refused"
+
+          # Every document the analysis wrote, so a second language added later
+          # is judged without this step being edited.
+          found=0
+          for sarif in sarif-results/*.sarif; do
+            [ -e "${sarif}" ] || continue
+            found=$((found + 1))
+            echo "judging ${sarif}"
+            python3 "${judge}" "${SEVERITY_FLOOR}" "${sarif}"
+          done
+          if [ "${found}" -eq 0 ]; then
+            echo "::error::the analysis wrote no result document, so nothing was judged."
+            exit 1
+          fi
+          echo "judged ${found} document(s) from the analysis"
+
+  code-scanning-near-miss:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    env:
+      # On a pull request the analysis restricts the alerts it keeps to the
+      # lines that pull request changed, and it says so in its own log:
+      # "Computing PR diff ranges", then a diff range extension pack handed to
+      # `database run-queries`. The program this job analyses is written by the
+      # job and is in no diff, so every alert about it was discarded before the
+      # judgement below ever saw one. That is the second way this proof failed
+      # while looking like a blind analyser.
+      #
+      # Off here and nowhere else. The gate job keeps the restriction, because
+      # there the diff is the change being judged; here the whole subject is a
+      # file no diff contains.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
+
+    steps:
+      # This repository is deliberately NOT checked out here, and the absence is
+      # the whole reason this job now proves anything. The extractor for this
+      # language indexes the directory the analysis runs in rather than the
+      # source root it is told about: with a checkout present it ran
+      # `database trace-command --working-dir` against the workspace, scanned
+      # this project's own crates, reported nothing, and failed while looking
+      # exactly like an analyser that is blind to the language. Leaving the
+      # workspace empty and writing the program into it is what makes the
+      # directory the analysis indexes and the program under analysis the same
+      # place. Nothing in this job reads a tracked file, so there is nothing for
+      # a checkout to supply.
+      - name: Write a program carrying the defect this gate names
+        # A path built from something the process was handed and opened without
+        # a check. It is written here rather than committed: a tracked copy
+        # would be a finding in the scanning surface for as long as the file
+        # exists, and a finding nobody intends to fix is how a scanning surface
+        # stops being read.
+        #
+        # Three spellings of one defect rather than one, and the reason is that
+        # a single spelling makes this proof a test of how a source and a sink
+        # happen to be modelled rather than of whether the analysis sees the
+        # defect. Reporting any one of them is enough. If none is reported, the
+        # honest reading is that the analysis does not see this class here, and
+        # that is what the failure below has to be allowed to say.
+        run: |
+          set -euo pipefail
+          mkdir -p src
+          cat > Cargo.toml <<'TOML'
+          [package]
+          name = "near-miss"
+          version = "0.0.0"
+          edition = "2021"
+          TOML
+          cat > src/main.rs <<'RS'
+          use std::fs;
+          use std::io::Read;
+          use std::path::{Path, PathBuf};
+
+          // An argument, taken one at a time.
+          fn read_the_argument() {
+              let asked_for = std::env::args().nth(1).unwrap();
+              let contents = fs::read_to_string(PathBuf::from(asked_for)).unwrap();
+              println!("{}", contents.len());
+          }
+
+          // The same argument, taken as a collection, which is the spelling
+          // most programs actually use.
+          fn read_the_argument_list() {
+              let arguments: Vec<String> = std::env::args().collect();
+              let contents = fs::read(&arguments[1]).unwrap();
+              println!("{}", contents.len());
+          }
+
+          // An environment variable, which the local threat model treats the
+          // same way and which this project will read for a catalogue location.
+          fn read_the_environment() {
+              let asked_for = std::env::var("LICHTTISCH_CATALOGUE").unwrap();
+              let mut handle = fs::File::open(Path::new(&asked_for)).unwrap();
+              let mut contents = String::new();
+              handle.read_to_string(&mut contents).unwrap();
+              println!("{}", contents.len());
+          }
+
+          fn main() {
+              read_the_argument();
+              read_the_argument_list();
+              read_the_environment();
+          }
+          RS
+          echo "the analysis will index:"
+          find . -name '*.rs' -o -name Cargo.toml | sort
+
+      - name: Initialise the analysis over that program
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: rust
+          build-mode: none
+          # No source-root, and that is the correction. Pointing it away from
+          # the directory the analysis runs in moved the source archive without
+          # moving the extractor, which is the failure described above.
+          config: |
+            queries:
+              - uses: security-extended
+            threat-models:
+              - local
+
+      - name: Analyse it, and keep the result out of the scanning surface
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:rust-near-miss
+          output: sarif-near-miss
+          # Never uploaded. This is a proof that the analysis sees the defect,
+          # not a finding about this repository.
+          upload: never
+          # No checkout_path either. It relocates where results are reported
+          # from and never where they are found, so setting it read as a
+          # redirection that had not happened.
+
+      - name: Fail unless the analysis reported it
+        env:
+          EXPECTED: rust/path-injection
+        run: |
+          set -euo pipefail
+          python3 - "${EXPECTED}" sarif-near-miss <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          expected = sys.argv[1]
+          directory = pathlib.Path(sys.argv[2])
+
+          documents = sorted(directory.glob("*.sarif"))
+          reported = set()
+          available = set()
+          for path in documents:
+              with open(path, encoding="utf-8") as handle:
+                  document = json.load(handle)
+              for run in document.get("runs", []):
+                  tool = run.get("tool", {})
+                  for pack in [tool.get("driver", {})] + list(tool.get("extensions", [])):
+                      for rule in pack.get("rules") or []:
+                          available.add(rule.get("id"))
+                  for result in run.get("results") or []:
+                      reported.add(result.get("ruleId"))
+
+          print(
+              f"examined={len(documents)} document(s) "
+              f"rules-available={len(available)} rules-reported={len(reported)}"
+          )
+          for rule_id in sorted(filter(None, reported)):
+              print(f"  reported  {rule_id}")
+
+          # Two different failures wear one face when only the reported set is
+          # printed. A suite that never carried the query says nothing about
+          # whether the analysis can see the defect; a suite that carried it and
+          # stayed quiet says the opposite. Print which of the two happened.
+          if expected not in reported:
+              if expected in available:
+                  print(
+                      f"::error::{expected} is in the suite this analysis ran and it reported nothing "
+                      "on a program written to carry it, so this gate has no evidence that the analysis "
+                      "sees the defect it names."
+                  )
+              else:
+                  print(
+                      f"::error::{expected} is not among the {len(available)} rule(s) this analysis "
+                      "carried, so the gate is asking for a query that was never run and would stay "
+                      "green whatever the analysis found."
+                  )
+              sys.exit(1)
+          print(f"ok    {expected} was reported")
+          PY
