@@ -72,9 +72,12 @@ is. #74 chooses the transport.
 reach `surface`, which is its line in `crates/module-boundaries.txt`. The other
 half is not, because the guard reads which packages a module reaches and never
 what a module does with them, so a session opening a window through a package
-already on its own line would pass. #72 runs the surface where there is no
-display, which is the case that would catch it in practice rather than by
-construction.
+already on its own line would pass. #106 runs the suite where there is no
+display, no camera and no accelerator, which is the case that would catch it in
+practice rather than by construction. This entry named #72 until #72 was closed
+as a duplicate of #106, and the two differ in more than a number: #72 sat in the
+session milestone and #106 sits in the parity one, so the route that would catch
+this arrives later in the plan than the rule it is registered against.
 
 **This software never deletes a photograph, never moves one and never writes
 into one.** Stated in `docs/decisions/0010-catalogue-schema.md` as the reason
