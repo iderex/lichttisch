@@ -38,10 +38,9 @@
 # this language would be green forever and would say nothing. The second job
 # writes a program carrying the defect this gate names first, analyses it the
 # same way, and fails unless the analyser reports it. Nothing vulnerable is
-# committed here to do that: the program is written into the runner's temporary
-# directory at run time, the same shape the static analysis gate's proof uses,
-# so the tree carries the near-miss without carrying a finding that would sit in
-# the scanning surface forever.
+# committed here to do that: the program is written at run time into a job that
+# checks nothing out, so the tree carries the near-miss without carrying a
+# finding that would sit in the scanning surface forever.
 #
 # No job `name:`, deliberately, for the reason build.yml gives: with none set the
 # check run takes the job id, which cannot drift apart from a label somebody
@@ -241,10 +240,17 @@ jobs:
       actions: read
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
+      # This repository is deliberately NOT checked out here, and the absence is
+      # the whole reason this job now proves anything. The extractor for this
+      # language indexes the directory the analysis runs in rather than the
+      # source root it is told about: with a checkout present it ran
+      # `database trace-command --working-dir` against the workspace, scanned
+      # this project's own crates, reported nothing, and failed while looking
+      # exactly like an analyser that is blind to the language. Leaving the
+      # workspace empty and writing the program into it is what makes the
+      # directory the analysis indexes and the program under analysis the same
+      # place. Nothing in this job reads a tracked file, so there is nothing for
+      # a checkout to supply.
       - name: Write a program carrying the defect this gate names
         # A path built from an argument the process was handed and opened
         # without a check. It is written here rather than committed: a tracked
@@ -253,15 +259,14 @@ jobs:
         # surface stops being read.
         run: |
           set -euo pipefail
-          crate="${RUNNER_TEMP}/near-miss"
-          mkdir -p "${crate}/src"
-          cat > "${crate}/Cargo.toml" <<'TOML'
+          mkdir -p src
+          cat > Cargo.toml <<'TOML'
           [package]
           name = "near-miss"
           version = "0.0.0"
           edition = "2021"
           TOML
-          cat > "${crate}/src/main.rs" <<'RS'
+          cat > src/main.rs <<'RS'
           use std::fs;
           use std::path::PathBuf;
 
@@ -272,13 +277,17 @@ jobs:
               println!("{}", contents.len());
           }
           RS
+          echo "the analysis will index:"
+          find . -name '*.rs' -o -name Cargo.toml | sort
 
       - name: Initialise the analysis over that program
         uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           languages: rust
           build-mode: none
-          source-root: ${{ runner.temp }}/near-miss
+          # No source-root, and that is the correction. Pointing it away from
+          # the directory the analysis runs in moved the source archive without
+          # moving the extractor, which is the failure described above.
           config: |
             queries:
               - uses: security-extended
@@ -293,7 +302,9 @@ jobs:
           # Never uploaded. This is a proof that the analysis sees the defect,
           # not a finding about this repository.
           upload: never
-          checkout_path: ${{ runner.temp }}/near-miss
+          # No checkout_path either. It relocates where results are reported
+          # from and never where they are found, so setting it read as a
+          # redirection that had not happened.
 
       - name: Fail unless the analysis reported it
         env:

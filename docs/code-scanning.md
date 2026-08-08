@@ -94,12 +94,24 @@ job writes a program that builds a path out of an argument it was handed and
 opens it without a check, analyses that program the same way, and fails unless
 the analysis reports it.
 
-Neither near-miss is a file committed to this tree. Both are written into the
-runner's temporary directory when the job runs, which is the shape the proof in
+Neither near-miss is a file committed to this tree. Both are written when the
+job runs, which is the shape the proof in
 `.github/workflows/static-analysis.yml` already uses. A tracked program carrying
 a deliberate defect would sit in the repository's scanning surface for as long
 as it existed, and a finding nobody intends to fix is how a scanning surface
 stops being read.
+
+The second one is written into the job's own working directory, and the job
+checks this repository out nowhere. That is not tidiness. The first attempt
+wrote the program into the runner's temporary directory and told the analysis
+to treat it as the source root, alongside an ordinary checkout, and the analysis
+indexed the checkout instead: it scanned this project's own crates, found
+nothing to report in them, and failed. A reader of that failure would have
+concluded that the analyser is blind to this language, which was not what had
+happened. What the source root moves is where results are reported from. What
+decides which files are indexed is the directory the analysis runs in, so an
+empty one holding only the program is the only arrangement in which this job's
+verdict is about the program.
 
 ## The check names
 
