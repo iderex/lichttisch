@@ -266,11 +266,18 @@ jobs:
       # place. Nothing in this job reads a tracked file, so there is nothing for
       # a checkout to supply.
       - name: Write a program carrying the defect this gate names
-        # A path built from an argument the process was handed and opened
-        # without a check. It is written here rather than committed: a tracked
-        # copy would be a finding in the scanning surface for as long as the
-        # file exists, and a finding nobody intends to fix is how a scanning
-        # surface stops being read.
+        # A path built from something the process was handed and opened without
+        # a check. It is written here rather than committed: a tracked copy
+        # would be a finding in the scanning surface for as long as the file
+        # exists, and a finding nobody intends to fix is how a scanning surface
+        # stops being read.
+        #
+        # Three spellings of one defect rather than one, and the reason is that
+        # a single spelling makes this proof a test of how a source and a sink
+        # happen to be modelled rather than of whether the analysis sees the
+        # defect. Reporting any one of them is enough. If none is reported, the
+        # honest reading is that the analysis does not see this class here, and
+        # that is what the failure below has to be allowed to say.
         run: |
           set -euo pipefail
           mkdir -p src
@@ -282,13 +289,38 @@ jobs:
           TOML
           cat > src/main.rs <<'RS'
           use std::fs;
-          use std::path::PathBuf;
+          use std::io::Read;
+          use std::path::{Path, PathBuf};
+
+          // An argument, taken one at a time.
+          fn read_the_argument() {
+              let asked_for = std::env::args().nth(1).unwrap();
+              let contents = fs::read_to_string(PathBuf::from(asked_for)).unwrap();
+              println!("{}", contents.len());
+          }
+
+          // The same argument, taken as a collection, which is the spelling
+          // most programs actually use.
+          fn read_the_argument_list() {
+              let arguments: Vec<String> = std::env::args().collect();
+              let contents = fs::read(&arguments[1]).unwrap();
+              println!("{}", contents.len());
+          }
+
+          // An environment variable, which the local threat model treats the
+          // same way and which this project will read for a catalogue location.
+          fn read_the_environment() {
+              let asked_for = std::env::var("LICHTTISCH_CATALOGUE").unwrap();
+              let mut handle = fs::File::open(Path::new(&asked_for)).unwrap();
+              let mut contents = String::new();
+              handle.read_to_string(&mut contents).unwrap();
+              println!("{}", contents.len());
+          }
 
           fn main() {
-              let asked_for = std::env::args().nth(1).unwrap_or_default();
-              let path = PathBuf::from(asked_for);
-              let contents = fs::read_to_string(path).unwrap_or_default();
-              println!("{}", contents.len());
+              read_the_argument();
+              read_the_argument_list();
+              read_the_environment();
           }
           RS
           echo "the analysis will index:"
