@@ -36,6 +36,17 @@
 //! `crates/lichttisch/tests/module_boundaries.rs` rather than here, so the
 //! entry for it in the list is a check that its guard is still in the tree,
 //! not a second implementation of it.
+//!
+//! A fourth bound used to be here without being written down. The two rules
+//! about foreign declarations and about the keyword read a fixed area, and
+//! that area was `crates` alone, so the four workspace members under `tools`
+//! were judged by nothing. Both rules exist because the workspace lint table
+//! reaches only a member that opted into it, and a member under `tools` can
+//! omit those two lines exactly as a member under `crates` can. The area is
+//! now every directory the workspace declares a member in, and
+//! `rule::every_workspace_member_sits_under_an_area_these_rules_read` is what
+//! keeps it that way: a member added under a new directory reddens rather
+//! than arriving unjudged.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -62,6 +73,16 @@ const BOUNDARY_DECLARATION: &str = "crates/module-boundaries.txt";
 
 /// The guard that reads it.
 const BOUNDARY_GUARD: &str = "crates/lichttisch/tests/module_boundaries.rs";
+
+/// The manifest declaring which members the workspace has.
+const WORKSPACE_MANIFEST: &str = "Cargo.toml";
+
+/// The directories the source rules below read, as pathspecs for git.
+///
+/// Two rather than one, because a workspace member is a member wherever it
+/// sits. Adding a member under a third directory without adding it here is
+/// what the area rule refuses.
+const JUDGED_AREAS: [&str; 2] = ["crates", "tools"];
 
 /// The opening of a foreign block, as it survives the stripper below.
 ///
@@ -226,6 +247,65 @@ fn manifest_mentions(text: &str, package: &str) -> Vec<(usize, String)> {
         .collect()
 }
 
+/// The workspace members a manifest declares, in the order it declares them.
+///
+/// Only the array is read. `[workspace.dependencies]` further down the same
+/// file names the same directories on lines of its own, and a rule reading the
+/// whole manifest would count those as membership and then agree with itself
+/// about an area nobody declared.
+///
+/// A `#` comment is dropped first, inside the array as well as outside it,
+/// because a member somebody commented out is not a member and an area kept
+/// alive by a commented line is an area the rules would read for no reason.
+fn declared_members(manifest: &str) -> Vec<String> {
+    let mut members = Vec::new();
+    let mut inside = false;
+    for line in manifest.lines() {
+        let code = line.split('#').next().unwrap_or("");
+        let scanning = if inside {
+            code
+        } else if code.trim_start().starts_with("members") && code.contains('[') {
+            inside = true;
+            code.split_once('[').map_or("", |(_, after)| after)
+        } else {
+            continue;
+        };
+        let closes = scanning.contains(']');
+        let upto = scanning.split(']').next().unwrap_or("");
+        for (index, piece) in upto.split('"').enumerate() {
+            if index % 2 == 1 {
+                members.push(piece.to_owned());
+            }
+        }
+        if closes {
+            break;
+        }
+    }
+    members
+}
+
+/// Every declared member lying under none of `areas`.
+///
+/// The comparison is by path component and not by prefix. An area written
+/// `tool` is the mistake to expect, and a prefix test would accept it, read
+/// nothing under it, and leave four members judged by nobody while the rule
+/// stayed green.
+fn members_outside(members: &[String], areas: &[&str]) -> Vec<String> {
+    members
+        .iter()
+        .filter(|member| {
+            let member = member.replace('\\', "/");
+            !areas.iter().any(|area| {
+                member == *area
+                    || member
+                        .strip_prefix(area)
+                        .is_some_and(|rest| rest.starts_with('/'))
+            })
+        })
+        .cloned()
+        .collect()
+}
+
 /// The record number a decision record's filename carries, if it carries one.
 fn record_number(path: &Path) -> Option<u32> {
     let name = path.file_name()?.to_str()?;
@@ -276,13 +356,31 @@ fn refusal(rule: &str, path: &str, hits: &[(usize, String)]) -> String {
 /// the list; nothing else holds it.
 mod rule {
     use super::{
-        BOUNDARY_DECLARATION, BOUNDARY_GUARD, LAYOUT_NOTE, RECORD_SECTION, RECORD_WATERMARK,
-        UNENFORCED_REGISTER, declares_where_its_rules_are_held, foreign_declarations, guard_names,
-        is_rust_source, manifest_mentions, read, record_number, refusal, shown, tracked,
+        BOUNDARY_DECLARATION, BOUNDARY_GUARD, JUDGED_AREAS, LAYOUT_NOTE, RECORD_SECTION,
+        RECORD_WATERMARK, UNENFORCED_REGISTER, WORKSPACE_MANIFEST, declared_members,
+        declares_where_its_rules_are_held, foreign_declarations, guard_names, is_rust_source,
+        manifest_mentions, members_outside, read, record_number, refusal, shown, tracked,
         unchecked_blocks, workspace_root,
     };
 
     const FOREIGN_HOME: &str = "crates/foreign/";
+
+    /// Every tracked Rust source in the judged areas, minus the one module the
+    /// two rules below exempt.
+    fn judged_sources() -> Vec<(String, String)> {
+        let mut sources = Vec::new();
+        for area in JUDGED_AREAS {
+            for path in tracked(area) {
+                let shown = shown(&path);
+                if !is_rust_source(&shown) || shown.starts_with(FOREIGN_HOME) {
+                    continue;
+                }
+                let text = read(&path);
+                sources.push((shown, text));
+            }
+        }
+        sources
+    }
 
     #[test]
     fn no_module_outside_foreign_declares_a_foreign_function() {
@@ -290,12 +388,8 @@ mod rule {
                     crates/foreign and nowhere else. A parser of stranger bytes \
                     reached from anywhere else is a boundary that exists only \
                     in a document.";
-        for path in tracked("crates") {
-            let shown = shown(&path);
-            if !is_rust_source(&shown) || shown.starts_with(FOREIGN_HOME) {
-                continue;
-            }
-            let hits = foreign_declarations(&read(&path));
+        for (shown, text) in judged_sources() {
+            let hits = foreign_declarations(&text);
             assert!(hits.is_empty(), "{}", refusal(rule, &shown, &hits));
         }
     }
@@ -306,14 +400,35 @@ mod rule {
                     written in crates/foreign and nowhere else. The workspace \
                     lint table denies it, but only for a member that opted \
                     into the table, and a member may omit those two lines.";
-        for path in tracked("crates") {
-            let shown = shown(&path);
-            if !is_rust_source(&shown) || shown.starts_with(FOREIGN_HOME) {
-                continue;
-            }
-            let hits = unchecked_blocks(&read(&path));
+        for (shown, text) in judged_sources() {
+            let hits = unchecked_blocks(&text);
             assert!(hits.is_empty(), "{}", refusal(rule, &shown, &hits));
         }
+    }
+
+    #[test]
+    fn every_workspace_member_sits_under_an_area_these_rules_read() {
+        let rule = "The two rules above read a fixed set of directories, so a \
+                    workspace member outside that set is compiled, shipped and \
+                    judged by nothing. This is what makes their reach follow \
+                    the workspace rather than the directory somebody happened \
+                    to start in: a member under a new directory reddens here \
+                    until that directory is added to the areas they read.";
+        let manifest = read(&workspace_root().join(WORKSPACE_MANIFEST));
+        let members = declared_members(&manifest);
+        assert!(
+            !members.is_empty(),
+            "{rule}\n\nno member read out of {WORKSPACE_MANIFEST}, so this rule \
+             judged nothing. A guard that read an empty set is not a guard that \
+             found no violation.\n"
+        );
+        let outside = members_outside(&members, &JUDGED_AREAS);
+        assert!(
+            outside.is_empty(),
+            "{rule}\n\nread by no rule above: {}\n\nthe areas read are: {}\n",
+            outside.join(", "),
+            JUDGED_AREAS.join(", ")
+        );
     }
 
     #[test]
@@ -402,8 +517,9 @@ mod rule {
 /// green or the rule is refusing the wrong thing.
 mod bites {
     use super::{
-        BOUNDARY_DECLARATION, declares_where_its_rules_are_held, foreign_declarations, guard_names,
-        manifest_mentions, record_number, unchecked_blocks,
+        BOUNDARY_DECLARATION, declared_members, declares_where_its_rules_are_held,
+        foreign_declarations, guard_names, manifest_mentions, members_outside, record_number,
+        unchecked_blocks,
     };
     use std::path::Path;
 
@@ -449,6 +565,57 @@ mod bites {
     fn the_guarantee_rule_passes_a_comment_and_a_string() {
         let neighbour = "// no unsafe block here\nlet needle = \"unsafe\";\n";
         assert!(unchecked_blocks(neighbour).is_empty());
+    }
+
+    #[test]
+    fn the_area_rule_refuses_a_member_under_a_directory_nothing_reads() {
+        let near_miss = [String::from("crates/catalogue"), String::from("xtask")];
+        assert_eq!(members_outside(&near_miss, &["crates", "tools"]), ["xtask"]);
+    }
+
+    #[test]
+    fn the_area_rule_refuses_an_area_one_letter_short() {
+        let near_miss = [String::from("tools/bench")];
+        assert_eq!(
+            members_outside(&near_miss, &["crates", "tool"]),
+            ["tools/bench"]
+        );
+    }
+
+    #[test]
+    fn the_area_rule_passes_a_member_under_an_area_that_is_read() {
+        let neighbour = [String::from("tools/bench"), String::from("crates/foreign")];
+        assert!(members_outside(&neighbour, &["crates", "tools"]).is_empty());
+    }
+
+    #[test]
+    fn the_member_list_stops_at_the_end_of_the_array() {
+        let manifest = concat!(
+            "[workspace]\n",
+            "members = [\n",
+            "    \"crates/catalogue\",\n",
+            "    \"tools/bench\",\n",
+            "]\n",
+            "\n",
+            "[workspace.dependencies]\n",
+            "surface = { path = \"crates/surface\" }\n",
+        );
+        assert_eq!(
+            declared_members(manifest),
+            ["crates/catalogue", "tools/bench"]
+        );
+    }
+
+    #[test]
+    fn the_member_list_passes_over_a_member_somebody_commented_out() {
+        let manifest = concat!(
+            "[workspace]\n",
+            "members = [\n",
+            "    \"crates/catalogue\",\n",
+            "#   \"xtask\",\n",
+            "]\n",
+        );
+        assert_eq!(declared_members(manifest), ["crates/catalogue"]);
     }
 
     #[test]
