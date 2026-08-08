@@ -65,17 +65,32 @@ be true this week.
 
 Size, today:
 
-    git grep -nE '^[[:space:]]*(unsafe )?extern "' -- 'crates/**/*.rs' ; echo "exit=$?"
+    git grep -nE '^[[:space:]]*(unsafe )?extern "' -- 'crates/**/*.rs' 'tools/**/*.rs' ; echo "exit=$?"
     exit=1
 
-    git grep -nw 'unsafe' -- 'crates/**/*.rs' ; echo "exit=$?"
-    exit=1
+    git grep -nw 'unsafe' -- 'crates/**/*.rs' 'tools/**/*.rs' ; echo "exit=$?"
+    crates/lichttisch/tests/architecture_rules.rs:235:    word_hits(text, "unsafe")
+    crates/lichttisch/tests/architecture_rules.rs:528:        let near_miss = "mod inner {\n    unsafe extern \"C\" {\n        fn decode();\n    }\n}\n";
+    crates/lichttisch/tests/architecture_rules.rs:553:        let near_miss = "fn read() {\n    unsafe { *pointer }\n}\n";
+    crates/lichttisch/tests/architecture_rules.rs:566:        let neighbour = "// no unsafe block here\nlet needle = \"unsafe\";\n";
+    exit=0
 
-No foreign declaration and no unsafe block exists yet, in any module. The
-decoder is not chosen, which is issue #39, and the inference runtime is issue
-#50. When they arrive, the two commands above are where the size of this surface
-is read, and they are written here so that a later reader gets a number rather
-than an impression.
+No foreign declaration exists yet, in any module. Neither does an unsafe block:
+the four lines above are the guard's own needle and the fixtures it proves
+itself against, all of them inside string literals, and telling those from code
+is what the stripper in `crates/lichttisch/tests/architecture_rules.rs` is for.
+`git grep` has no such stripper, which is why the second command answers `0`
+here and the guard stays green. The decoder is not chosen, which is issue #39,
+and the inference runtime is issue #50. When they arrive, the two commands above
+are where the size of this surface is read, and they are written here so that a
+later reader gets a number rather than an impression.
+
+Both pathspecs name `tools` as well as `crates`, because a workspace member is a
+member wherever it sits and the rules that refuse a violation now read both. The
+second output pasted here said `exit=1` until this paragraph landed, against a
+command that had been answering `0` for as long as the guard has carried
+fixtures. Nothing re-runs an unmarked block, which is stated at the top of
+`tools/docs-lint/src/rerun.rs`, so it was read by a person rather than refused.
 
 ## What enforces the direction
 
