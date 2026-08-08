@@ -72,9 +72,20 @@ printed by the judgement and is not what reds the check. The run prints how many
 results it examined and how many carried no score, so a reader can see the
 difference rather than assume it.
 
-It is not a statement about the whole tree either. The analysis is source-only
-for this language, so what it sees is what the workspace resolves to at that
-commit.
+It is not a statement about the whole tree either, and on a pull request it is
+narrower than that in a way worth naming. The analysis is source-only for this
+language, so what it sees is what the workspace resolves to at that commit. On
+top of that, when the run belongs to a pull request the analysis restricts the
+alerts it keeps to the lines that pull request changed. It says so in its own
+log, which prints `Computing PR diff ranges` and then hands a diff range
+extension pack to the query run. So a green gate on a pull request says the
+change introduced no finding, not that the tree holds none. The whole-tree
+statement is the run on the default branch after the merge, which belongs to no
+pull request and therefore has no diff to be restricted to.
+
+That restriction is left on for the gate, because there the change is exactly
+what is being judged. It is turned off in the near-miss job, and the reason is
+below.
 
 ## The two near-misses
 
@@ -100,6 +111,13 @@ job runs, which is the shape the proof in
 a deliberate defect would sit in the repository's scanning surface for as long
 as it existed, and a finding nobody intends to fix is how a scanning surface
 stops being read.
+
+The second one also runs with the diff restriction turned off, and that is the
+second correction rather than a preference. The program it analyses is written
+by the job, so it appears in no pull request's diff, and every alert about it
+was discarded before the check could read one. Both failures produced the same
+symptom: an analysis that reported nothing, which reads as an analyser that
+cannot see the language. Neither was that.
 
 The second one is written into the job's own working directory, and the job
 checks this repository out nowhere. That is not tidiness. The first attempt

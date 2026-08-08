@@ -239,6 +239,20 @@ jobs:
       contents: read
       actions: read
 
+    env:
+      # On a pull request the analysis restricts the alerts it keeps to the
+      # lines that pull request changed, and it says so in its own log:
+      # "Computing PR diff ranges", then a diff range extension pack handed to
+      # `database run-queries`. The program this job analyses is written by the
+      # job and is in no diff, so every alert about it was discarded before the
+      # judgement below ever saw one. That is the second way this proof failed
+      # while looking like a blind analyser.
+      #
+      # Off here and nowhere else. The gate job keeps the restriction, because
+      # there the diff is the change being judged; here the whole subject is a
+      # file no diff contains.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
+
     steps:
       # This repository is deliberately NOT checked out here, and the absence is
       # the whole reason this job now proves anything. The extractor for this
@@ -311,7 +325,6 @@ jobs:
           EXPECTED: rust/path-injection
         run: |
           set -euo pipefail
-          echo "rules reported:"
           python3 - "${EXPECTED}" sarif-near-miss <<'PY'
           import json
           import pathlib
@@ -320,22 +333,44 @@ jobs:
           expected = sys.argv[1]
           directory = pathlib.Path(sys.argv[2])
 
+          documents = sorted(directory.glob("*.sarif"))
           reported = set()
-          for path in sorted(directory.glob("*.sarif")):
+          available = set()
+          for path in documents:
               with open(path, encoding="utf-8") as handle:
                   document = json.load(handle)
               for run in document.get("runs", []):
+                  tool = run.get("tool", {})
+                  for pack in [tool.get("driver", {})] + list(tool.get("extensions", [])):
+                      for rule in pack.get("rules") or []:
+                          available.add(rule.get("id"))
                   for result in run.get("results") or []:
                       reported.add(result.get("ruleId"))
 
+          print(
+              f"examined={len(documents)} document(s) "
+              f"rules-available={len(available)} rules-reported={len(reported)}"
+          )
           for rule_id in sorted(filter(None, reported)):
-              print(f"  {rule_id}")
+              print(f"  reported  {rule_id}")
 
+          # Two different failures wear one face when only the reported set is
+          # printed. A suite that never carried the query says nothing about
+          # whether the analysis can see the defect; a suite that carried it and
+          # stayed quiet says the opposite. Print which of the two happened.
           if expected not in reported:
-              print(
-                  f"::error::the analysis did not report {expected} on a program written to carry it, "
-                  "so this gate has no evidence that it sees anything in this language."
-              )
+              if expected in available:
+                  print(
+                      f"::error::{expected} is in the suite this analysis ran and it reported nothing "
+                      "on a program written to carry it, so this gate has no evidence that the analysis "
+                      "sees the defect it names."
+                  )
+              else:
+                  print(
+                      f"::error::{expected} is not among the {len(available)} rule(s) this analysis "
+                      "carried, so the gate is asking for a query that was never run and would stay "
+                      "green whatever the analysis found."
+                  )
               sys.exit(1)
           print(f"ok    {expected} was reported")
           PY
