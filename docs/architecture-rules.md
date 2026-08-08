@@ -48,12 +48,16 @@ no query.** Stated as a bound rather than a measurement in
 enforced. What crosses it is not, and there is no foreign code in the tree to
 judge:
 
-    git grep -nE '^[[:space:]]*(unsafe )?extern "' -- 'crates/**/*.rs' ; echo "exit=$?"
+    git grep -nE '^[[:space:]]*(unsafe )?extern "' -- 'crates/**/*.rs' 'tools/**/*.rs' ; echo "exit=$?"
     exit=1
 
-Exit 1 from `git grep` is the clean answer: no match. #40 is where the bound
-becomes a number produced by a command, and that issue is where the refusal is
-built.
+Exit 1 from `git grep` is the clean answer: no match. The pathspec names both
+directories the workspace declares members in, which is the reach the enforced
+rule has: it read `crates` alone until
+`rule::every_workspace_member_sits_under_an_area_these_rules_read` landed, and a
+command quoted here narrower than the rule it stands behind is a claim about
+less than the reader takes it for. #40 is where the bound becomes a number
+produced by a command, and that issue is where the refusal is built.
 
 **Tethered capture is a process of its own, and the culling surface stays up
 when it dies.** Stated in `docs/decisions/0004-where-tethering-sits.md`. A
