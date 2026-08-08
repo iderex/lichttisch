@@ -33,7 +33,10 @@ is what keeps a fuzzer pointed at decoding pointed at something.
 `crates/culling` holds the culling signals. It is the only module allowed to
 reach an inference runtime, and it reaches one only through `crates/foreign`. It
 stays clear of the session, because a signal that knows what the operator is
-doing is a signal that can be tuned to please them.
+doing is a signal that can be tuned to please them. The shape every signal is
+built against, and the one route a signal is called through, are here rather
+than in each signal, and `docs/decisions/0012-signal-interface.md` is where that
+shape is argued.
 
 `crates/session` holds the culling session as a headless state machine. It
 draws nothing, and it stays clear of the surface so that the thing holding the

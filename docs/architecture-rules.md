@@ -79,6 +79,16 @@ tree writes anything at all yet. #71 is where it becomes a test, and the shape
 that test has to have is a refusal at the one place a path is opened for
 writing rather than a search for the calls somebody remembered.
 
+**Nothing can read a value out of a signal that had no opinion.** Stated in
+`docs/decisions/0012-signal-interface.md`. The compiler holds it rather than a
+check: the arm of `Opinion` carrying no opinion carries no measurement, so code
+reaching for one does not compile, and there is nothing for a test in this tree
+to observe at run time. What would enforce it as a test is a harness that
+compiles a program and expects the compilation to fail, which is a dependency
+this tree does not carry and which nothing else here would use. It is registered
+in this half so that a reader does not take the absence of a test for the
+absence of the rule.
+
 **No code dependency in either direction with the generative editing project.**
 Stated in `docs/decisions/0007-scope-boundary.md`. The direction this tree can
 refuse is refused, and it is in the enforced list above. The other direction is
