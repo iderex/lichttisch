@@ -93,10 +93,15 @@ green on every pull request, and both were correct answers to different
 questions. Twenty results, one query and one severity, read out of the last of
 those pushes:
 
-    gh run view 31268516008 --log-failed | grep -oE 'over  rust/path-injection security-severity=7.5 [^ ]+$' | awk '{print $NF}' | sort | uniq -c
+    gh api repos/iderex/lichttisch/actions/jobs/93130443132/logs | grep -oE 'over  rust/path-injection security-severity=7\.5 [^ ]+' | awk '{print $NF}' | sort | uniq -c
           5 crates/catalogue/src/lock.rs
           4 crates/catalogue/tests/single_writer.rs
          11 tools/corpus/src/write.rs
+
+That job is the gate on the last push that carried them, and a run's log is kept
+for a bounded time rather than forever, so the command above stops answering at
+some point. What replaces it is the same judgement on a later run, and the
+counts above are what it returned on 2026-08-08.
 
 None of the twenty fell on a line any pull request had changed, so the diff
 restriction discarded all of them before the judgement on a pull request saw
